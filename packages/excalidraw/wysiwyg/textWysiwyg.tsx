@@ -298,8 +298,11 @@ export const textWysiwyg = ({
   //文本框增量换行,逐行渲染2026.3.28
   let lastSelectionStart: number | null = null;
   let lastSelectionEnd: number | null = null;
+  let pendingInputTimeout: number | null = null;
   let pendingInputRaf: number | null = null;
   let suppressHighlightOnInput = false;
+  //文本框增量换行,逐行渲染2026.3.28
+  const inputIdleDelayMs = 120;
   //文本框增量换行,逐行渲染2026.3.28
   const highlightTextThreshold = 20000;
   let highlightUpdateRaf: number | null = null;
@@ -1907,18 +1910,26 @@ export const textWysiwyg = ({
         editable.selectionStart = selectionStart;
         editable.selectionEnd = selectionStart;
       }
+      scheduleCaretUpdate();
       suppressHighlightOnInput = true;
+      if (pendingInputTimeout != null) {
+        clearTimeout(pendingInputTimeout);
+      }
       if (pendingInputRaf != null) {
         cancelAnimationFrame(pendingInputRaf);
+        pendingInputRaf = null;
       }
       //文本框增量换行,逐行渲染2026.3.28
-      pendingInputRaf = requestAnimationFrame(() => {
-        pendingInputRaf = null;
-        updateWhitespaceOverlayContent();
-        onChange(editable.value);
-        scheduleCaretUpdate();
-        suppressHighlightOnInput = false;
-      });
+      pendingInputTimeout = window.setTimeout(() => {
+        pendingInputTimeout = null;
+        pendingInputRaf = requestAnimationFrame(() => {
+          pendingInputRaf = null;
+          updateWhitespaceOverlayContent();
+          onChange(editable.value);
+          scheduleCaretUpdate();
+          suppressHighlightOnInput = false;
+        });
+      }, inputIdleDelayMs);
     };
 
     const preventEditIfSyncedLine = (event: Event) => {
@@ -2531,6 +2542,14 @@ export const textWysiwyg = ({
     if (highlightUpdateRaf != null) {
       cancelAnimationFrame(highlightUpdateRaf);
       highlightUpdateRaf = null;
+    }
+    if (pendingInputTimeout != null) {
+      clearTimeout(pendingInputTimeout);
+      pendingInputTimeout = null;
+    }
+    if (pendingInputRaf != null) {
+      cancelAnimationFrame(pendingInputRaf);
+      pendingInputRaf = null;
     }
 
     if (dblClickCountdownRaf != null) {

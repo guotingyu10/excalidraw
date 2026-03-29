@@ -6689,15 +6689,13 @@ class App extends React.Component<AppProps, AppState> {
     };
 
     const getViewportCoords = (x: number, y: number): [number, number] => {
-      const state = this.state;
       const { x: viewportX, y: viewportY } = sceneCoordsToViewportCoords(
         { sceneX: x, sceneY: y },
-        state,
+        this.state,
       );
-      console.log("[DEBUG textLarge] getViewportCoords state:", {scrollX: state.scrollX, scrollY: state.scrollY, zoom: state.zoom.value, elementXY: [x, y], resultViewport: [viewportX - state.offsetLeft, viewportY - state.offsetTop]});
       return [
-        viewportX - state.offsetLeft,
-        viewportY - state.offsetTop,
+        viewportX - this.state.offsetLeft,
+        viewportY - this.state.offsetTop,
       ] as [number, number];
     };
 
