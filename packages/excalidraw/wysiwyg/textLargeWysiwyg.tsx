@@ -54,17 +54,14 @@ export const textLargeWysiwyg = ({
   initialPointerDownSceneCoords?: { x: number; y: number };
   initialPointerDownClientCoords?: { x: number; y: number };
 }): SubmitHandler => {
-  const appState = app.state;
-  const [viewportX, viewportY] = getViewportCoords(element.x, element.y);
-
   const editorContainer = document.createElement("div");
   editorContainer.classList.add("excalidraw-text-large-editor");
 
   Object.assign(editorContainer.style, {
     position: "absolute",
     display: "inline-block",
-    left: `${viewportX}px`,
-    top: `${viewportY}px`,
+    left: "0",
+    top: "0",
     width: `${element.width}px`,
     height: `${element.height}px`,
     zIndex: "var(--zIndex-wysiwyg)",
@@ -111,6 +108,25 @@ export const textLargeWysiwyg = ({
     excalidrawContainer.appendChild(editorContainer);
   }
 
+  let rafId: number | null = null;
+  let isSubmitted = false;
+  let frameCount = 0;
+
+  const updateEditorPosition = (): number => {
+    if (isSubmitted) {
+      return 0;
+    }
+    frameCount++;
+    const [viewportX, viewportY] = getViewportCoords(element.x, element.y);
+    console.log("[DEBUG textLarge] RAF", frameCount, "viewportX:", viewportX, "viewportY:", viewportY, "elementXY:", element.x, element.y);
+    editorContainer.style.left = `${viewportX}px`;
+    editorContainer.style.top = `${viewportY}px`;
+    rafId = requestAnimationFrame(updateEditorPosition);
+    return rafId;
+  };
+
+  rafId = requestAnimationFrame(updateEditorPosition);
+
   setTimeout(() => {
     editable.focus();
   }, 0);
@@ -130,6 +146,16 @@ export const textLargeWysiwyg = ({
   };
 
   const submitText = () => {
+    console.log("[DEBUG textLarge] submitText called, isSubmitted:", isSubmitted);
+    if (isSubmitted) {
+      return;
+    }
+    isSubmitted = true;
+    if (rafId !== null) {
+      console.log("[DEBUG textLarge] Cancelling RAF, rafId:", rafId);
+      cancelAnimationFrame(rafId);
+      rafId = null;
+    }
     const text = editable.value;
     if (editorContainer.parentNode) {
       editorContainer.remove();

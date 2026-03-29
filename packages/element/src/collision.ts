@@ -46,6 +46,7 @@ import {
   isImageElement,
   isLinearElement,
   isTextElement,
+  isTextLargeElement,
 } from "./typeChecks";
 import {
   deconstructDiamondElement,
@@ -86,7 +87,8 @@ export const shouldTestInside = (element: ExcalidrawElement) => {
     !isTransparent(element.backgroundColor) ||
     hasBoundTextElement(element) ||
     isIframeLikeElement(element) ||
-    isTextElement(element);
+    isTextElement(element) ||
+    isTextLargeElement(element);
 
   if (element.type === "line") {
     return isDraggableFromInside && isPathALoop(element.points);

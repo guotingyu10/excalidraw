@@ -6689,13 +6689,15 @@ class App extends React.Component<AppProps, AppState> {
     };
 
     const getViewportCoords = (x: number, y: number): [number, number] => {
+      const state = this.state;
       const { x: viewportX, y: viewportY } = sceneCoordsToViewportCoords(
         { sceneX: x, sceneY: y },
-        this.state,
+        state,
       );
+      console.log("[DEBUG textLarge] getViewportCoords state:", {scrollX: state.scrollX, scrollY: state.scrollY, zoom: state.zoom.value, elementXY: [x, y], resultViewport: [viewportX - state.offsetLeft, viewportY - state.offsetTop]});
       return [
-        viewportX - this.state.offsetLeft,
-        viewportY - this.state.offsetTop,
+        viewportX - state.offsetLeft,
+        viewportY - state.offsetTop,
       ] as [number, number];
     };
 
@@ -8945,8 +8947,10 @@ class App extends React.Component<AppProps, AppState> {
         });
         pointerDownState.hit.wasAddedToSelection = true;
       }
-    } else if (this.state.activeTool.type === "text" || this.state.activeTool.type === "text-large") {
+    } else if (this.state.activeTool.type === "text") {
       this.handleTextOnPointerDown(event, pointerDownState);
+    } else if (this.state.activeTool.type === "text-large") {
+      this.handleTextLargeOnPointerDown(event, pointerDownState);
     } else if (
       this.state.activeTool.type === "arrow" ||
       this.state.activeTool.type === "line"

@@ -285,7 +285,7 @@ const TextLineNumbersOverlay = ({
       heightScene: number;
     }> = [];
     for (const element of visibleElements) {
-      if (!isTextElement(element) || element.angle) {
+      if (element.type !== "text" || element.angle) {
         continue;
       }
       out.push({
@@ -309,7 +309,7 @@ const TextLineNumbersOverlay = ({
     const out: LineNumberButtonItem[] = [];
 
     for (const element of visibleElements) {
-      if (!isTextElement(element) || element.angle) {
+      if (element.type !== "text" || element.angle) {
         continue;
       }
 
@@ -317,7 +317,7 @@ const TextLineNumbersOverlay = ({
 
       const font = getFontString(element) as any;
       const originalText = getOriginalText(element);
-
+      //文本框增量换行,逐行渲染2026.3.28
       const signature = [
         element.x,
         element.y,
@@ -398,9 +398,7 @@ const TextLineNumbersOverlay = ({
       };
 
       //文本框增量换行,逐行渲染2026.3.28
-      const viewTopScene = -appState.scrollY;
-      const viewBottomScene =
-        viewTopScene + appState.height / appState.zoom.value;
+      // 内容变更时重算，移动时仅依赖容器 transform
       let logicalLineNumber = 1;
       let isLogicalLineStart = true;
       forEachWrappedLine(
@@ -412,12 +410,7 @@ const TextLineNumbersOverlay = ({
           const yCenterScene =
             element.y + lineIndex * lineHeightScene + lineHeightScene / 2;
           if (isLogicalLineStart) {
-            if (
-              yCenterScene >= viewTopScene - lineHeightScene &&
-              yCenterScene <= viewBottomScene + lineHeightScene
-            ) {
-              addLine(logicalLineNumber, yCenterScene);
-            }
+            addLine(logicalLineNumber, yCenterScene);
           }
           if (explicitNewlineAfterLine) {
             logicalLineNumber += 1;
@@ -443,9 +436,6 @@ const TextLineNumbersOverlay = ({
   }, [
     isDisabled,
     visibleElements,
-    appState.scrollY,
-    appState.height,
-    appState.zoom.value,
   ]);
 
   const itemByKey = useMemo(() => {
@@ -455,6 +445,25 @@ const TextLineNumbersOverlay = ({
     }
     return map;
   }, [items]);
+
+  //文本框增量换行,逐行渲染2026.3.28
+  const visibleItems = useMemo(() => {
+    if (items.length === 0) {
+      return items;
+    }
+    const viewTopScene = -appState.scrollY;
+    const viewBottomScene =
+      viewTopScene + appState.height / appState.zoom.value;
+    const bufferPx = 4;
+    return items.filter((item) => {
+      const top = item.topScene;
+      const bottom = item.topScene + item.lineHeightScene;
+      return (
+        bottom >= viewTopScene - bufferPx &&
+        top <= viewBottomScene + bufferPx
+      );
+    });
+  }, [items, appState.scrollY, appState.height, appState.zoom.value]);
 
   const summaryToolDecorations = useMemo(() => {
     const getLineItem = (elementId: string, lineNumber: number) =>
@@ -738,7 +747,7 @@ const TextLineNumbersOverlay = ({
             {item.text}
           </div>
         ))}
-        {items.map((item, idx) => {
+        {visibleItems.map((item, idx) => {
           const isDraft =
             !!appState.textLineLinkDraft &&
             appState.textLineLinkDraft.elementId === item.elementId &&
