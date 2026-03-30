@@ -868,39 +868,76 @@ export const forEachWrappedLine = (
   }) => boolean | void,
 ) => {
   const normalizedText = text.replace(/\r\n?/g, "\n");
-  const originalLines = normalizedText.split("\n");
   const canWrap = shouldWrap && Number.isFinite(maxWidth) && maxWidth >= 0;
-  let lineIndex = 0;
-  let globalIndex = 0;
 
-  for (let originalLineIndex = 0; originalLineIndex < originalLines.length; originalLineIndex++) {
-    const originalLine = originalLines[originalLineIndex] ?? "";
-    const currentLineWidth = canWrap ? getLineWidth(originalLine, font) : 0;
-    const wrappedLines =
-      canWrap && currentLineWidth > maxWidth
-        ? wrapLinePreservingWhitespace(originalLine, font, maxWidth)
-        : [originalLine];
-    let offsetInOriginal = 0;
-    for (let i = 0; i < wrappedLines.length; i++) {
-      const lineText = wrappedLines[i] ?? "";
-      const lineStartIndex = globalIndex + offsetInOriginal;
-      const explicitNewlineAfterLine =
-        i === wrappedLines.length - 1 &&
-        originalLineIndex < originalLines.length - 1;
-      const shouldStop = onLine({
-        lineText,
-        lineIndex,
-        lineStartIndex,
-        explicitNewlineAfterLine,
-      });
-      lineIndex += 1;
-      if (shouldStop) {
-        return;
+  // Utilize the cache to prevent extremely expensive re-calculations on every frame/input
+  const cacheKey = canWrap 
+    ? getWrapTextCacheKey(normalizedText, font, maxWidth, "algo", "forEach")
+    : null;
+  
+  let wrappedLinesCache = cacheKey ? getFromWrapTextCache(cacheKey) : null;
+
+  if (!wrappedLinesCache) {
+    const originalLines = normalizedText.split("\n");
+    const lines: string[] = [];
+    const explicitNewlineAfterLine: boolean[] = [];
+
+    // Pre-calculate line widths to avoid redundant measureText calls
+    // For very long texts, this is a massive bottleneck
+    if (!canWrap) {
+      for (let i = 0; i < originalLines.length; i++) {
+        lines.push(originalLines[i]);
+        explicitNewlineAfterLine.push(i < originalLines.length - 1);
       }
-      offsetInOriginal += lineText.length;
+    } else {
+      for (let originalLineIndex = 0; originalLineIndex < originalLines.length; originalLineIndex++) {
+        const originalLine = originalLines[originalLineIndex] ?? "";
+        
+        // Fast path: if the line is empty, skip measurement
+        if (originalLine === "") {
+          lines.push("");
+          explicitNewlineAfterLine.push(originalLineIndex < originalLines.length - 1);
+          continue;
+        }
+
+        const currentLineWidth = getLineWidth(originalLine, font);
+        const wrappedLines = currentLineWidth > maxWidth
+            ? wrapLinePreservingWhitespace(originalLine, font, maxWidth)
+            : [originalLine];
+            
+        for (let i = 0; i < wrappedLines.length; i++) {
+          lines.push(wrappedLines[i] ?? "");
+          explicitNewlineAfterLine.push(
+            i === wrappedLines.length - 1 &&
+            originalLineIndex < originalLines.length - 1
+          );
+        }
+      }
     }
-    globalIndex += originalLine.length;
-    if (originalLineIndex < originalLines.length - 1) {
+    wrappedLinesCache = { lines, explicitNewlineAfterLine };
+    if (cacheKey) {
+      setToWrapTextCache(cacheKey, wrappedLinesCache);
+    }
+  }
+
+  let globalIndex = 0;
+  for (let i = 0; i < wrappedLinesCache.lines.length; i++) {
+    const lineText = wrappedLinesCache.lines[i];
+    const isExplicit = wrappedLinesCache.explicitNewlineAfterLine[i];
+    
+    const shouldStop = onLine({
+      lineText,
+      lineIndex: i,
+      lineStartIndex: globalIndex,
+      explicitNewlineAfterLine: isExplicit,
+    });
+    
+    if (shouldStop) {
+      return;
+    }
+    
+    globalIndex += lineText.length;
+    if (isExplicit) {
       globalIndex += 1;
     }
   }

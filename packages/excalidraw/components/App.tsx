@@ -6444,7 +6444,7 @@ class App extends React.Component<AppProps, AppState> {
         }),
       ]);
     };
-
+    // 文本尺寸更新节流，可降低至 100ms
     const updateElementDimensionsThrottled = throttle(
       (nextOriginalText: string) => {
         if (nextOriginalText.length > 5_000) {
@@ -6452,7 +6452,7 @@ class App extends React.Component<AppProps, AppState> {
         }
         updateElement(nextOriginalText, false, true);
       },
-      200,
+      10,
       { leading: false },
     );
 

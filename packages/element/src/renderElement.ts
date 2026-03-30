@@ -1233,6 +1233,8 @@ const drawElementOnCanvas = (
           visibleLineEnd,
         });
 
+        // 我们现在完全依靠 Canvas 来渲染空白符和换行符，即使在编辑模式下也由 Canvas 渲染
+        // 所以我们移除了 isEditing 的判断，让它永远绘制。
         drawTextWhitespaceMarkers({
           context,
           element,

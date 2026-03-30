@@ -287,9 +287,6 @@ export const textWysiwyg = ({
   });
 
   let lastWhitespaceOverlayValue = "";
-  let whitespaceOverlayLineNodes: Text[] = [];
-  let whitespaceOverlayLineStarts: number[] = [];
-  const whitespaceOverlayNodeToLineIndex = new WeakMap<Text, number>();
   let lastBeforeInputState: {
     value: string;
     selectionStart: number;
@@ -301,228 +298,136 @@ export const textWysiwyg = ({
   let pendingInputTimeout: number | null = null;
   let pendingInputRaf: number | null = null;
   let suppressHighlightOnInput = false;
+  //文本框增量换行,逐行渲染2026.3.28 输入延迟
+  const inputIdleDelayMs = 10;
+  // 120
   //文本框增量换行,逐行渲染2026.3.28
-  const inputIdleDelayMs = 120;
-  //文本框增量换行,逐行渲染2026.3.28
-  const highlightTextThreshold = 20000;
   let highlightUpdateRaf: number | null = null;
 
-  //文本框增量换行,逐行渲染2026.3.28
-  const buildOverlayLines = (value: string) => {
-    const rawLines = value.split("\n");
-    const lines =
-      rawLines.length === 0
-        ? [""]
-        : rawLines.map((line, idx) =>
-            idx < rawLines.length - 1 ? `${line}\n` : line,
-          );
-    return lines.length === 0 ? [""] : lines;
-  };
-
-  //文本框增量换行,逐行渲染2026.3.28
-  const rebuildWhitespaceOverlay = (value: string) => {
-    whitespaceOverlayContent.textContent = "";
-    whitespaceOverlayLineNodes = [];
-    whitespaceOverlayLineStarts = [];
-    const lines = buildOverlayLines(value);
-    let cursor = 0;
-    const fragment = document.createDocumentFragment();
-    for (let i = 0; i < lines.length; i++) {
-      const lineText = lines[i] ?? "";
-      const node = document.createTextNode(lineText);
-      fragment.appendChild(node);
-      whitespaceOverlayLineNodes.push(node);
-      whitespaceOverlayLineStarts.push(cursor);
-      whitespaceOverlayNodeToLineIndex.set(node, i);
-      cursor += lineText.length;
-    }
-    whitespaceOverlayContent.appendChild(fragment);
-    lastWhitespaceOverlayValue = value;
-  };
-
-  //文本框增量换行,逐行渲染2026.3.28
-  const getOverlayLineIndexAt = (index: number) => {
-    if (whitespaceOverlayLineStarts.length === 0) {
-      return 0;
-    }
-    const clamped = Math.max(
-      0,
-      Math.min(lastWhitespaceOverlayValue.length, index),
-    );
-    let lo = 0;
-    let hi = whitespaceOverlayLineStarts.length - 1;
-    while (lo <= hi) {
-      const mid = Math.floor((lo + hi) / 2);
-      const start = whitespaceOverlayLineStarts[mid] ?? 0;
-      const nextStart =
-        whitespaceOverlayLineStarts[mid + 1] ??
-        lastWhitespaceOverlayValue.length + 1;
-      if (clamped < start) {
-        hi = mid - 1;
-      } else if (clamped >= nextStart) {
-        lo = mid + 1;
-      } else {
-        return mid;
-      }
-    }
-    return Math.max(0, Math.min(whitespaceOverlayLineStarts.length - 1, lo));
-  };
-
-  //文本框增量换行,逐行渲染2026.3.28
   const getOverlayNodeAtIndex = (index: number) => {
-    const clamped = Math.max(
-      0,
-      Math.min(lastWhitespaceOverlayValue.length, index),
-    );
-    const lineIndex = getOverlayLineIndexAt(clamped);
-    const lineStart = whitespaceOverlayLineStarts[lineIndex] ?? 0;
-    const node = whitespaceOverlayLineNodes[lineIndex];
-    const maxOffset = node?.data.length ?? 0;
-    const offset = Math.max(0, Math.min(maxOffset, clamped - lineStart));
-    return { node, offset, lineIndex, lineStart };
+    return { node: null as Node | null, offset: 0 };
   };
 
-  //文本框增量换行,逐行渲染2026.3.28
   const getOverlayIndexFromNodeOffset = (
     node: Node | null,
     offset: number | null | undefined,
   ) => {
-    if (!node || !Number.isFinite(offset)) {
-      return null;
+    return null;
+  };
+
+  // 添加一个专门的 throttle 机制来优化滚动/缩放时的渲染性能
+  let renderThrottleTimeout: number | null = null;
+  let isRendering = false;
+  
+  const throttleRender = (callback: () => void) => {
+    if (isRendering) return;
+    
+    if (renderThrottleTimeout === null) {
+      renderThrottleTimeout = window.setTimeout(() => {
+        isRendering = true;
+        requestAnimationFrame(() => {
+          callback();
+          isRendering = false;
+          renderThrottleTimeout = null;
+        });
+      }, 16); // ~60fps
     }
-    if (node.nodeType !== Node.TEXT_NODE) {
-      return null;
-    }
-    const lineIndex = whitespaceOverlayNodeToLineIndex.get(node as Text);
-    if (lineIndex == null) {
-      return null;
-    }
-    const lineStart = whitespaceOverlayLineStarts[lineIndex] ?? 0;
-    const lineLength = whitespaceOverlayLineNodes[lineIndex]?.data.length ?? 0;
-    const clampedOffset = Math.max(0, Math.min(lineLength, Number(offset)));
-    return Math.max(
-      0,
-      Math.min(lastWhitespaceOverlayValue.length, lineStart + clampedOffset),
-    );
   };
 
   const updateWhitespaceOverlayContent = () => {
     const nextValue = editable.value;
-    if (lastWhitespaceOverlayValue === nextValue) {
-      return;
-    }
-
-    const prevValue = lastWhitespaceOverlayValue;
-    if (whitespaceOverlayLineNodes.length === 0) {
-      rebuildWhitespaceOverlay(nextValue);
-      return;
-    }
-    const prevLen = prevValue.length;
-    const nextLen = nextValue.length;
-
-    let prefixLen = 0;
-    let suffixLen = 0;
-    if (lastBeforeInputState && lastBeforeInputState.value === prevValue) {
-      const selStart = Math.max(
-        0,
-        Math.min(prevLen, lastBeforeInputState.selectionStart),
-      );
-      const selEnd = Math.max(
-        selStart,
-        Math.min(prevLen, lastBeforeInputState.selectionEnd),
-      );
-      const removedLen = selEnd - selStart;
-      const insertedLen = nextLen - (prevLen - removedLen);
-      if (insertedLen >= 0) {
-        prefixLen = selStart;
-        suffixLen = Math.max(0, prevLen - prefixLen - removedLen);
-        const expectedNextLen = prevLen - removedLen + insertedLen;
-        if (expectedNextLen !== nextLen) {
-          prefixLen = 0;
-          suffixLen = 0;
-        }
-      }
-    }
-    if (prefixLen === 0 && suffixLen === 0) {
-      while (
-        prefixLen < prevLen &&
-        prefixLen < nextLen &&
-        prevValue[prefixLen] === nextValue[prefixLen]
-      ) {
-        prefixLen += 1;
-      }
-
-      while (
-        suffixLen < prevLen - prefixLen &&
-        suffixLen < nextLen - prefixLen &&
-        prevValue[prevLen - 1 - suffixLen] === nextValue[nextLen - 1 - suffixLen]
-      ) {
-        suffixLen += 1;
-      }
-    }
-    lastBeforeInputState = null;
-
-    const prevChangeEnd = prevLen - suffixLen;
-    const nextChangeEnd = nextLen - suffixLen;
-    const startLineIndex = getOverlayLineIndexAt(prefixLen);
-    const endLineIndex = getOverlayLineIndexAt(
-      Math.max(prefixLen, prevChangeEnd - 1),
-    );
-    const nextLineStartIndex =
-      nextValue.lastIndexOf("\n", Math.max(0, prefixLen - 1)) + 1;
-    const nextLineEndIndex = (() => {
-      const searchStart = Math.max(0, nextChangeEnd - 1);
-      const idx = nextValue.indexOf("\n", searchStart);
-      return idx === -1 ? nextLen : idx + 1;
-    })();
-    const slice = nextValue.slice(nextLineStartIndex, nextLineEndIndex);
-    const newLines = buildOverlayLines(slice);
-    const newNodes = newLines.map((lineText) =>
-      document.createTextNode(lineText),
-    );
-
-    const removeCount = Math.max(0, endLineIndex - startLineIndex + 1);
-    const afterNode = whitespaceOverlayLineNodes[endLineIndex + 1] ?? null;
-    for (let i = 0; i < removeCount; i++) {
-      whitespaceOverlayLineNodes[startLineIndex + i]?.remove();
-    }
-    const fragment = document.createDocumentFragment();
-    for (const node of newNodes) {
-      fragment.appendChild(node);
-    }
-    if (afterNode) {
-      whitespaceOverlayContent.insertBefore(fragment, afterNode);
-    } else {
-      whitespaceOverlayContent.appendChild(fragment);
-    }
-
-    const prevLineStartIndex = whitespaceOverlayLineStarts[startLineIndex] ?? 0;
-    const prevLineEndIndex =
-      whitespaceOverlayLineStarts[endLineIndex + 1] ?? prevLen;
-    const prevSegmentLength = prevLineEndIndex - prevLineStartIndex;
-    const nextSegmentLength = nextLineEndIndex - nextLineStartIndex;
-    const shift = nextSegmentLength - prevSegmentLength;
-    const newLineStarts: number[] = [];
-    let cursor = nextLineStartIndex;
-    for (const lineText of newLines) {
-      newLineStarts.push(cursor);
-      cursor += lineText.length;
-    }
-    whitespaceOverlayLineNodes.splice(startLineIndex, removeCount, ...newNodes);
-    whitespaceOverlayLineStarts = [
-      ...whitespaceOverlayLineStarts.slice(0, startLineIndex),
-      ...newLineStarts,
-      ...whitespaceOverlayLineStarts
-        .slice(endLineIndex + 1)
-        .map((start) => start + shift),
-    ];
-    for (let i = startLineIndex; i < whitespaceOverlayLineNodes.length; i++) {
-      const node = whitespaceOverlayLineNodes[i];
-      if (node) {
-        whitespaceOverlayNodeToLineIndex.set(node, i);
-      }
-    }
     lastWhitespaceOverlayValue = nextValue;
+    
+    const updatedTextElement = app.scene.getElement<ExcalidrawTextElement>(id);
+    if (!updatedTextElement || !isTextElement(updatedTextElement)) {
+      return;
+    }
+
+    const lineHeightPx = updatedTextElement.fontSize * updatedTextElement.lineHeight;
+    if (lineHeightPx <= 0) return;
+
+    // 为了解决软换行对齐问题，我们不能强行设置 editable 为 pre，
+    // 因为这会破坏原生的文本选择、光标定位（特别是通过鼠标点击时的计算）。
+    // 我们必须让 editable 保持原本的软换行状态，然后底层 div 用同样的 pre-wrap 去贴合它，
+    // 或者我们底层使用绝对定位，但 editable 必须保持原生换行属性。
+    // 但是，由于我们需要使用绝对定位来避免跨行误差累加，而 editable（原生 textarea）不支持单行绝对定位，
+    // 如果我们强行把 editable.style.whiteSpace 设为 "pre" 并且依靠它来输入，
+    // 原生 textarea 的视觉换行就没了，选区计算自然会因为 "看起来没换行，实际上我们底层画了换行" 而出现错位（选区总是偏到下一行去）。
+    // 
+    // 正确的做法是：
+    // - 让 editable 保持原本的换行设置 (pre-wrap / break-spaces)
+    // - 让 whitespaceOverlay 也保持原本的换行设置 (pre-wrap / break-spaces)
+    // - 我们不再使用每行绝对定位，而是恢复“逐行渲染”为 TextNode，但是！
+    // - 我们利用 forEachWrappedLine 来精准计算并直接生成一个和 editable 排版完全一致的 DOM 结构，不加额外的绝对定位。
+    // 由于我们不使用绝对定位，我们依靠的是浏览器原生对于 pre-wrap 的渲染引擎，只要上下层样式绝对一致，就不会有偏差。
+    
+    // 恢复原生换行设置
+    const supportsBreakSpaces =
+      typeof CSS !== "undefined" &&
+      typeof CSS.supports === "function" &&
+      CSS.supports("white-space", "break-spaces");
+    const shouldWrap = isBoundToContainer(updatedTextElement) || !updatedTextElement.autoResize;
+    let whiteSpace = "pre";
+    let wordBreak = "normal";
+    if (shouldWrap) {
+      whiteSpace = supportsBreakSpaces ? "break-spaces" : "pre-wrap";
+      wordBreak = "break-word";
+    }
+    editable.style.whiteSpace = whiteSpace;
+    editable.style.wordBreak = wordBreak;
+    editable.style.overflowWrap = shouldWrap ? "break-word" : "normal";
+    whitespaceOverlay.style.whiteSpace = whiteSpace;
+    highlightOverlay.style.whiteSpace = whiteSpace;
+
+    const normalizedValue = nextValue.replace(/\r\n?/g, "\n");
+    const font = getFontString(updatedTextElement);
+    const editorWidth = parseFloat(editable.style.width) || updatedTextElement.width;
+
+    const wrappedLines: { text: string; isExplicitNewline: boolean }[] = [];
+    forEachWrappedLine(
+      normalizedValue,
+      font,
+      editorWidth,
+      shouldWrap,
+      ({ lineText, explicitNewlineAfterLine }) => {
+        wrappedLines.push({ text: lineText, isExplicitNewline: explicitNewlineAfterLine });
+      }
+    );
+
+    const zoom = app.state.zoom.value;
+    const rect = editable.getBoundingClientRect();
+    
+    if (!rect.height) {
+      whitespaceOverlayContent.innerHTML = "";
+      return;
+    }
+
+    const visibleTopLocal = Math.max(0, -rect.top) / zoom;
+    const visibleBottomLocal = (Math.max(0, -rect.top) + window.innerHeight) / zoom;
+    
+    // Virtual Scrolling
+    const startLine = Math.max(0, Math.floor(visibleTopLocal / lineHeightPx) - 10);
+    const endLine = Math.min(wrappedLines.length - 1, Math.ceil(visibleBottomLocal / lineHeightPx) + 10);
+
+    let html = "";
+    for (let i = startLine; i <= endLine; i++) {
+      const lineInfo = wrappedLines[i];
+      if (!lineInfo) continue;
+      let lineText = lineInfo.text;
+      
+      const style = `position: absolute; top: ${i * lineHeightPx}px; height: ${lineHeightPx}px; left: 0; right: 0; overflow: hidden; white-space: pre;`;
+      
+      // 我们完全关闭了 DOM 层的空白符和换行符渲染，交由 Canvas 统一渲染
+      // 只保留 HTML 实体转义以防 XSS
+      lineText = lineText
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+
+      html += `<div style="${style}">${lineText}</div>`;
+    }
+
+    whitespaceOverlayContent.innerHTML = html;
   };
 
   const updateHighlightOverlay = () => {
@@ -532,12 +437,8 @@ export const textWysiwyg = ({
     }
 
     const value = editable.value;
-    if (value.length > highlightTextThreshold) {
-      highlightOverlay.innerHTML = "";
-      return;
-    }
-    const selectionStart = editable.selectionStart;
-    const selectionEnd = editable.selectionEnd;
+    const selectionStart = editable.selectionStart ?? 0;
+    const selectionEnd = editable.selectionEnd ?? 0;
 
     let word = "";
     if (selectionStart === selectionEnd) {
@@ -573,34 +474,88 @@ export const textWysiwyg = ({
       return;
     }
 
-    // Create highlighted content
-    let highlightedContent = "";
-    let lastIndex = 0;
+    const updatedTextElement = app.scene.getElement<ExcalidrawTextElement>(id);
+    if (!updatedTextElement || !isTextElement(updatedTextElement)) return;
+    
+    const lineHeightPx = updatedTextElement.fontSize * updatedTextElement.lineHeight;
+    if (lineHeightPx <= 0) return;
 
-    // Escape regex special characters
+    const lines = value.split("\n");
+    const zoom = app.state.zoom.value;
+    const rect = editable.getBoundingClientRect();
+    
+    if (!rect.height) {
+      highlightOverlay.innerHTML = "";
+      return;
+    }
+
+    const supportsBreakSpaces =
+      typeof CSS !== "undefined" &&
+      typeof CSS.supports === "function" &&
+      CSS.supports("white-space", "break-spaces");
+    const shouldWrap = isBoundToContainer(updatedTextElement) || !updatedTextElement.autoResize;
+    let whiteSpace = "pre";
+    let wordBreak = "normal";
+    if (shouldWrap) {
+      whiteSpace = supportsBreakSpaces ? "break-spaces" : "pre-wrap";
+      wordBreak = "break-word";
+    }
+
+    const normalizedValue = value.replace(/\r\n?/g, "\n");
+    const font = getFontString(updatedTextElement);
+    const editorWidth = parseFloat(editable.style.width) || updatedTextElement.width;
+
+    const wrappedLines: { text: string }[] = [];
+    forEachWrappedLine(
+      normalizedValue,
+      font,
+      editorWidth,
+      shouldWrap,
+      ({ lineText }) => {
+        wrappedLines.push({ text: lineText });
+      }
+    );
+
+    const visibleTopLocal = Math.max(0, -rect.top) / zoom;
+    const visibleBottomLocal = (Math.max(0, -rect.top) + window.innerHeight) / zoom;
+    
+    const startLine = Math.max(0, Math.floor(visibleTopLocal / lineHeightPx) - 10);
+    const endLine = Math.min(wrappedLines.length - 1, Math.ceil(visibleBottomLocal / lineHeightPx) + 10);
+
     const escapedWord = word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
-    // Create regex that works for both English and Chinese
-    // For Chinese, we don't use word boundaries since they don't work well
-    let regex;
+    let regex: RegExp;
     if (/[\u4e00-\u9fa5]/.test(word)) {
-      // If word contains Chinese characters, use simple match
       regex = new RegExp(escapedWord, "gi");
     } else {
-      // If word is only English, use word boundaries
       regex = new RegExp(`\\b${escapedWord}\\b`, "gi");
     }
 
-    let match;
+    let html = "";
+    for (let i = startLine; i <= endLine; i++) {
+      const lineInfo = wrappedLines[i];
+      if (!lineInfo) continue;
+      const lineText = lineInfo.text;
+      
+      let safeLine = lineText.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      
+      if (lineText.match(regex)) {
+        // Escape for replacement safely
+        const safeWord = word.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        let safeRegex: RegExp;
+        if (/[\u4e00-\u9fa5]/.test(word)) {
+          safeRegex = new RegExp(safeWord.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi");
+        } else {
+          safeRegex = new RegExp(`\\b${safeWord.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "gi");
+        }
+        
+        safeLine = safeLine.replace(safeRegex, '<span style="background-color: rgba(168, 168, 168, 0.3);">$&</span>');
+      }
 
-    while ((match = regex.exec(value)) !== null) {
-      highlightedContent += value.slice(lastIndex, match.index);
-      highlightedContent += `<span style="background-color: rgba(168, 168, 168, 0.3);">${match[0]}</span>`;
-      lastIndex = match.index + match[0].length;
+      const style = `position: absolute; top: ${i * lineHeightPx}px; height: ${lineHeightPx}px; left: 0; right: 0; overflow: hidden; white-space: pre;`;
+      html += `<div style="${style}">${safeLine}</div>`;
     }
 
-    highlightedContent += value.slice(lastIndex);
-    highlightOverlay.innerHTML = highlightedContent;
+    highlightOverlay.innerHTML = html;
   };
 
   let LAST_THEME = app.state.theme;
@@ -800,13 +755,13 @@ export const textWysiwyg = ({
       if (keepCaretVisibleWhilePointerDown) {
         return;
       }
-      caret.style.display = "none";
+      // caret.style.display = "none";
       return;
     }
 
     const updatedTextElement = app.scene.getElement<ExcalidrawTextElement>(id);
     if (!updatedTextElement || !isTextElement(updatedTextElement)) {
-      caret.style.display = "none";
+      // caret.style.display = "none";
       return;
     }
 
@@ -834,12 +789,10 @@ export const textWysiwyg = ({
     const lineHeightPx =
       updatedTextElement.fontSize * updatedTextElement.lineHeight;
     if (lineHeightPx <= 0) {
-      caret.style.display = "none";
+      // caret.style.display = "none";
       return;
     }
 
-    const editorWidth =
-      parseFloat(editable.style.width) || updatedTextElement.width;
     const overlayValue = lastWhitespaceOverlayValue;
     const caretIndex = Math.max(
       0,
@@ -850,6 +803,7 @@ export const textWysiwyg = ({
       .split("\n").length;
     updateSummaryLineLinkSelection(updatedTextElement, caretLineNumber);
 
+    const editorWidth = parseFloat(editable.style.width) || updatedTextElement.width;
     const overlayStyle = window.getComputedStyle(whitespaceOverlay);
     const transformStr = overlayStyle.transform;
     const DOMMatrixReadOnlyCtor: any = (window as any).DOMMatrixReadOnly;
@@ -862,8 +816,8 @@ export const textWysiwyg = ({
       ? Math.abs(matrix.b) > 1e-6 || Math.abs(matrix.c) > 1e-6
       : false;
 
-    const shouldUseMeasuredCaret =
-      hasRotationOrSkew || overlayValue.length > 8000;
+    // Use measured caret always to ensure perfect alignment with absolute positioned lines
+    const shouldUseMeasuredCaret = true;
     if (shouldUseMeasuredCaret) {
       const normalizedValue = editable.value.replace(/\r\n?/g, "\n");
       const font = getFontString(updatedTextElement);
@@ -975,7 +929,7 @@ export const textWysiwyg = ({
       if (!node) {
         return null;
       }
-      const nextOffset = Math.min(node.data.length, offset + 1);
+      const nextOffset = Math.min((node as Text).data?.length ?? 0, offset + 1);
       range.setStart(node, offset);
       range.setEnd(node, nextOffset);
       const rects =
@@ -1068,6 +1022,19 @@ export const textWysiwyg = ({
     caret.style.left = `${caretLocalX}px`;
     caret.style.top = `${caretLocalY}px`;
     caret.style.height = `${lineHeightPx}px`;
+  };
+
+  // 添加样式缓存避免重复重排
+  let lastStyleCache = {
+    font: "",
+    lineHeight: 0,
+    width: 0,
+    height: 0,
+    viewportX: 0,
+    viewportY: 0,
+    transform: "",
+    opacity: 0,
+    maxHeight: 0,
   };
 
   const updateWysiwygStyle = () => {
@@ -1176,6 +1143,48 @@ export const textWysiwyg = ({
       // Make sure text editor height doesn't go beyond viewport
       const editorMaxHeight =
         (appState.height - viewportY) / appState.zoom.value;
+        
+      const transform = getTransform(
+        width,
+        height,
+        getTextElementAngle(updatedTextElement, container),
+        appState,
+        maxWidth,
+        editorMaxHeight,
+      );
+
+      // Check cache to avoid triggering massive reflows on every single scroll/pan frame
+      const currentStyleCache = {
+        font,
+        lineHeight: updatedTextElement.lineHeight,
+        width,
+        height,
+        viewportX,
+        viewportY,
+        transform,
+        opacity: updatedTextElement.opacity,
+        maxHeight: editorMaxHeight,
+      };
+
+      const hasStyleChanged =
+        lastStyleCache.font !== currentStyleCache.font ||
+        lastStyleCache.lineHeight !== currentStyleCache.lineHeight ||
+        lastStyleCache.width !== currentStyleCache.width ||
+        lastStyleCache.height !== currentStyleCache.height ||
+        lastStyleCache.viewportX !== currentStyleCache.viewportX ||
+        lastStyleCache.viewportY !== currentStyleCache.viewportY ||
+        lastStyleCache.transform !== currentStyleCache.transform ||
+        lastStyleCache.opacity !== currentStyleCache.opacity ||
+        lastStyleCache.maxHeight !== currentStyleCache.maxHeight;
+
+      if (!hasStyleChanged) {
+        // Just mutate coordinates if needed and return early
+        app.scene.mutateElement(updatedTextElement, { x: coordX, y: coordY });
+        return;
+      }
+
+      lastStyleCache = currentStyleCache;
+
       Object.assign(editable.style, {
         font,
         // must be defined *after* font ¯\_(ツ)_/¯
@@ -1184,14 +1193,7 @@ export const textWysiwyg = ({
         height: `${height}px`,
         left: `${viewportX}px`,
         top: `${viewportY}px`,
-        transform: getTransform(
-          width,
-          height,
-          getTextElementAngle(updatedTextElement, container),
-          appState,
-          maxWidth,
-          editorMaxHeight,
-        ),
+        transform,
         textAlign,
         verticalAlign,
         color: "transparent",
@@ -1199,7 +1201,7 @@ export const textWysiwyg = ({
         opacity: updatedTextElement.opacity / 100,
         maxHeight: `${editorMaxHeight}px`,
       });
-      caret.style.background = appState.textEditorCaretColor;
+      caret.style.background = appState.textEditorCaretColor || "currentcolor";
 
       // overlay 必须与 textarea 完全同样的几何与排版参数，否则点会错位
       Object.assign(whitespaceOverlay.style, {
@@ -1309,7 +1311,19 @@ export const textWysiwyg = ({
     boxSizing: "content-box",
     pointerEvents: "none",
     color: "transparent",
+    // Ensure it overlays perfectly over the canvas text which might be still rendering
+    opacity: 1,
   });
+  
+  // To avoid duplicate markers from canvas and wysiwyg overlay overlapping,
+  // we must ensure that the canvas text element itself is hidden when editing starts.
+  // Excalidraw natively sets `element.opacity = 0` during edit mode in `App.tsx`'s `startTextEditing`
+  // But our custom overlays in renderElement.ts might still be drawing markers!
+  // We'll fix this by hiding the canvas text directly via DOM if possible,
+  // but since we render on canvas, we rely on the `editingTextElement` state check in renderElement.ts.
+  // Make sure we have a solid background color for the text editor if needed, 
+  // or rely on Excalidraw's core to hide the original element.
+
   editable.value = element.originalText;
   updateWysiwygStyle();
   updateWhitespaceOverlayContent();
@@ -1446,18 +1460,49 @@ export const textWysiwyg = ({
         0,
         Math.floor((localY + 1e-6) / lineHeightPx),
       );
-      const lineInfo = getWrappedLineByVisualIndex(
-        normalizedValue,
-        font,
-        editorWidth,
-        shouldWrap,
-        targetLineIndex,
-      );
+      
+      // Use cache to prevent extreme lag on click/drag selection in 30k text
+      let lineInfo: {
+        lineText: string;
+        lineIndex: number;
+        lineStartIndex: number;
+      } | null = null;
+      let cumulativeWidths: number[] | null = null;
+
+      if (
+        caretMeasurementCache &&
+        caretMeasurementCache.normalizedValue === normalizedValue &&
+        caretMeasurementCache.font === font &&
+        caretMeasurementCache.editorWidth === editorWidth &&
+        caretMeasurementCache.shouldWrap === shouldWrap &&
+        caretMeasurementCache.caretIndex === targetLineIndex // misuse caretIndex as targetLineIndex to reuse cache interface
+      ) {
+        lineInfo = caretMeasurementCache.lineInfo;
+        cumulativeWidths = caretMeasurementCache.cumulativeWidths;
+      } else {
+        lineInfo = getWrappedLineByVisualIndex(
+          normalizedValue,
+          font,
+          editorWidth,
+          shouldWrap,
+          targetLineIndex,
+        );
+        cumulativeWidths = buildCumulativeCharWidths(lineInfo.lineText, font);
+        caretMeasurementCache = {
+          normalizedValue,
+          font,
+          editorWidth,
+          shouldWrap,
+          caretIndex: targetLineIndex, 
+          lineInfo,
+          cumulativeWidths,
+        };
+      }
+      
       const lineText = lineInfo.lineText;
       const clampedLineIndex = lineInfo.lineIndex;
       const lineStartIndex = lineInfo.lineStartIndex;
       //文本框增量换行,逐行渲染2026.3.28
-      const cumulativeWidths = buildCumulativeCharWidths(lineText, font);
       const lineWidth = cumulativeWidths[lineText.length] ?? 0;
 
       let lineOffsetX = 0;
@@ -1560,7 +1605,7 @@ export const textWysiwyg = ({
       if (!node) {
         return null;
       }
-      const nextOffset = Math.min(node.data.length, offset + 1);
+      const nextOffset = Math.min((node as Text).data?.length ?? 0, offset + 1);
       range.setStart(node, offset);
       range.setEnd(node, nextOffset);
       const rects =
@@ -2760,6 +2805,11 @@ export const textWysiwyg = ({
 
   const unbindOnScroll = app.onScrollChangeEmitter.on(() => {
     updateWysiwygStyle();
+    throttleRender(() => {
+      updateWhitespaceOverlayContent();
+      updateHighlightOverlay();
+      scheduleCaretUpdate();
+    });
   });
 
   // ---------------------------------------------------------------------------
@@ -2866,16 +2916,16 @@ export const textWysiwyg = ({
 
   editable.onpointerdown = (event) => {
     event.stopPropagation();
-    if (event.button === POINTER_BUTTON.MAIN) {
-      if (dblClickCountdownRaf == null) {
-        startDblClickCountdown();
-      }
-    }
+    // if (event.button === POINTER_BUTTON.MAIN) {
+    //   if (dblClickCountdownRaf == null) {
+    //     startDblClickCountdown();
+    //   }
+    // }
   };
 
   editable.addEventListener("dblclick", () => {
-    lastNativeDblClickAt = performance.now();
-    stopDblClickCountdown();
+    // lastNativeDblClickAt = performance.now();
+    // stopDblClickCountdown();
   });
 
   editable.addEventListener("pointerup", (event) => {
@@ -2948,6 +2998,8 @@ export const textWysiwyg = ({
       }
       */
 
+      // 禁用自定义的连击计算，让点击只具有定位光标的作用
+      /*
       if (lastNativeDblClickAt != null) {
         const sinceNative = performance.now() - lastNativeDblClickAt;
         if (sinceNative >= 0 && sinceNative < 80) {
@@ -3043,6 +3095,7 @@ export const textWysiwyg = ({
         firstPointerUpAt = now;
       }
       lastPointerUpAt = now;
+      */
     });
   });
 
@@ -3082,6 +3135,7 @@ export const textWysiwyg = ({
       ) {
         return;
       }
+      
       const recalculatedSelectionIndex = getSelectionIndexFromPointerDown();
       if (recalculatedSelectionIndex === null) {
         return;

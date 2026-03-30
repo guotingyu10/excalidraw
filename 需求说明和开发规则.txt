@@ -1023,7 +1023,7 @@ text-large无法点击编辑的原因是什么
 
 
 
-
+从选中状态点击插入光标,第一次是准确的,第二次是不准确的,退出到选中状态,再点击插入光标第一次是1准确的,第二次是不准确的;
 
 
 text-large是另一种废弃的文本框不用处理
@@ -1043,7 +1043,7 @@ for /f "tokens=5" %a in ('netstat -ano ^| findstr :3001') do taskkill /F /PID %a
 yarn electron:build:win
 安装依赖
 yarn install
-yarn electron:install 
+yarn electron:install
 start-electron-dev.bat
 yarn electron:dev
 yarn electron:build:win

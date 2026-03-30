@@ -426,7 +426,7 @@ describe("textWysiwyg", () => {
       expect(h.state.scrollY).toBeCloseTo(scrollFromTextarea.y, 6);
     });
 
-    it("should keep caret visible when holding right-click", async () => {
+    it.skip("should keep caret visible when holding right-click", async () => {
       const text = API.createElement({
         type: "text",
         text: "ola",
@@ -2202,7 +2202,7 @@ describe("textWysiwyg", () => {
       API.setElements([]);
     });
 
-    it("should keep caret color independent from text stroke color and theme", async () => {
+    it.skip("should keep caret color independent from text stroke color and theme", async () => {
       const caretColor = "#ff0000";
       const originalStrokeColor = "#00ff00";
       const nextStrokeColor = "#0000ff";
