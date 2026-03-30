@@ -81,6 +81,7 @@ export * from "./mutateElement";
 export * from "./newElement";
 export * from "./positionElementsOnGrid";
 export * from "./renderElement";
+export { textWrapCache, type TextWrapCacheEntry } from "./renderElement";
 export * from "./resizeElements";
 export * from "./resizeTest";
 export * from "./Scene";

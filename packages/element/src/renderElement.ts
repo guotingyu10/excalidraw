@@ -85,7 +85,7 @@ import type {
 
 import type { RoughCanvas } from "roughjs/bin/canvas";
 
-type TextWrapCacheEntry = {
+export type TextWrapCacheEntry = {
   version: number;
   versionNonce: number;
   maxWidth: number;
@@ -96,7 +96,7 @@ type TextWrapCacheEntry = {
   explicitNewlineAfterLine: readonly boolean[];
 };
 
-const textWrapCache = new WeakMap<ExcalidrawTextElement, TextWrapCacheEntry>();
+export const textWrapCache = new WeakMap<ExcalidrawTextElement, TextWrapCacheEntry>();
 
 const isPendingImageElement = (
   element: ExcalidrawElement,

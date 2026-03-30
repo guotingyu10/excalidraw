@@ -9,7 +9,8 @@ let cachedLineBreakRegex: RegExp | undefined;
 let cachedEmojiRegex: RegExp | undefined;
 
 //对“换行结果”做强缓存,拖动/平移时只读缓存，不做任何测量。提升帧率2026.03.21
-const WRAP_TEXT_CACHE_MAX_ENTRIES = 100000;
+// 降低为 2000 以防大文本导致内存泄漏，同时满足日常撤销/重做和交互的缓存需求
+const WRAP_TEXT_CACHE_MAX_ENTRIES = 2000;
 const wrapTextCache = new Map<
   string,
   { lines: string[]; explicitNewlineAfterLine: boolean[] }
@@ -639,7 +640,10 @@ export const wrapTextPreservingWhitespaceWithExplicitNewlineMarkers = (
   // - 仅在用户真实输入的换行处显示 ↵（不会在自动换行处显示）
 
   const normalizedText = text.replace(/\r\n?/g, "\n");
-  const canCache = normalizedText.length <= 10_000 && Number.isFinite(maxWidth);
+  // Allow caching up to 1,000,000 characters to prevent severe lag on large texts.
+  // We rely on the WRAP_TEXT_CACHE_MAX_ENTRIES to prevent unbounded memory growth,
+  // and modern JS engines are efficient with string references.
+  const canCache = normalizedText.length <= 1_000_000 && Number.isFinite(maxWidth);
 
   if (canUseDomTextWrapping() && normalizedText.length <= 5_000) {
     const cacheKey = canCache
@@ -863,82 +867,33 @@ export const forEachWrappedLine = (
   onLine: (args: {
     lineText: string;
     lineIndex: number;
-    lineStartIndex: number;
     explicitNewlineAfterLine: boolean;
   }) => boolean | void,
 ) => {
   const normalizedText = text.replace(/\r\n?/g, "\n");
   const canWrap = shouldWrap && Number.isFinite(maxWidth) && maxWidth >= 0;
 
-  // Utilize the cache to prevent extremely expensive re-calculations on every frame/input
-  const cacheKey = canWrap 
-    ? getWrapTextCacheKey(normalizedText, font, maxWidth, "algo", "forEach")
-    : null;
-  
-  let wrappedLinesCache = cacheKey ? getFromWrapTextCache(cacheKey) : null;
+  const wrapWidth = canWrap ? maxWidth : Infinity;
 
-  if (!wrappedLinesCache) {
-    const originalLines = normalizedText.split("\n");
-    const lines: string[] = [];
-    const explicitNewlineAfterLine: boolean[] = [];
+  // We reuse the exact same caching and wrapping logic as renderElement
+  const { lines, explicitNewlineAfterLine } = wrapTextPreservingWhitespaceWithExplicitNewlineMarkers(
+    normalizedText,
+    font,
+    wrapWidth,
+  );
 
-    // Pre-calculate line widths to avoid redundant measureText calls
-    // For very long texts, this is a massive bottleneck
-    if (!canWrap) {
-      for (let i = 0; i < originalLines.length; i++) {
-        lines.push(originalLines[i]);
-        explicitNewlineAfterLine.push(i < originalLines.length - 1);
-      }
-    } else {
-      for (let originalLineIndex = 0; originalLineIndex < originalLines.length; originalLineIndex++) {
-        const originalLine = originalLines[originalLineIndex] ?? "";
-        
-        // Fast path: if the line is empty, skip measurement
-        if (originalLine === "") {
-          lines.push("");
-          explicitNewlineAfterLine.push(originalLineIndex < originalLines.length - 1);
-          continue;
-        }
-
-        const currentLineWidth = getLineWidth(originalLine, font);
-        const wrappedLines = currentLineWidth > maxWidth
-            ? wrapLinePreservingWhitespace(originalLine, font, maxWidth)
-            : [originalLine];
-            
-        for (let i = 0; i < wrappedLines.length; i++) {
-          lines.push(wrappedLines[i] ?? "");
-          explicitNewlineAfterLine.push(
-            i === wrappedLines.length - 1 &&
-            originalLineIndex < originalLines.length - 1
-          );
-        }
-      }
-    }
-    wrappedLinesCache = { lines, explicitNewlineAfterLine };
-    if (cacheKey) {
-      setToWrapTextCache(cacheKey, wrappedLinesCache);
-    }
-  }
-
-  let globalIndex = 0;
-  for (let i = 0; i < wrappedLinesCache.lines.length; i++) {
-    const lineText = wrappedLinesCache.lines[i];
-    const isExplicit = wrappedLinesCache.explicitNewlineAfterLine[i];
+  for (let i = 0; i < lines.length; i++) {
+    const lineText = lines[i];
+    const isExplicit = explicitNewlineAfterLine[i];
     
     const shouldStop = onLine({
       lineText,
       lineIndex: i,
-      lineStartIndex: globalIndex,
       explicitNewlineAfterLine: isExplicit,
     });
     
     if (shouldStop) {
       return;
-    }
-    
-    globalIndex += lineText.length;
-    if (isExplicit) {
-      globalIndex += 1;
     }
   }
 };
