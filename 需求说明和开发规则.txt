@@ -1029,7 +1029,7 @@ text-large无法点击编辑的原因是什么
 text-large是另一种废弃的文本框不用处理
 如何解决在查看大文本文本框的不同部分,行号始终不出现,除非点击编辑这一部分的行号才可见的问题;让行号始终可见
 能否用虚拟 DOM 渲染优化性能
-
+git filter-repo --strip-blobs-bigger-than 50M --force
 git remote add origin https://github.com/guotingyu10/excalidraw.git
 git remote set-url origin https://github.com/guotingyu10/excalidraw.git
 git push origin --force --all
