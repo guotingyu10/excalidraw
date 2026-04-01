@@ -5177,6 +5177,53 @@ class App extends React.Component<AppProps, AppState> {
           return;
         }
 
+        // ESC 键：如果选中了矩形及其内部元素，取消选中内部元素，只保留矩形
+        if (event.key === KEYS.ESCAPE) {
+          const selectedElements = getSelectedElements(
+            this.scene.getNonDeletedElementsMap(),
+            this.state,
+          );
+          const selectedRectangles = selectedElements.filter(
+            (el) => el.type === "rectangle",
+          );
+
+          if (selectedRectangles.length > 0 && selectedElements.length > 1) {
+            const innerElementIds = new Set<string>();
+            selectedRectangles.forEach((rect) => {
+              const innerElements = getElementsWithinSelection(
+                this.scene.getNonDeletedElements(),
+                rect,
+                this.scene.getNonDeletedElementsMap(),
+                false,
+              );
+              innerElements.forEach((el) => {
+                if (el.id !== rect.id) {
+                  innerElementIds.add(el.id);
+                }
+              });
+            });
+
+            const hasInnerElementsSelected = selectedElements.some((el) =>
+              innerElementIds.has(el.id),
+            );
+
+            if (hasInnerElementsSelected) {
+              const nextSelectedElementIds: { [id: string]: true } = {};
+              selectedRectangles.forEach((rect) => {
+                nextSelectedElementIds[rect.id] = true;
+              });
+
+              this.setState((prevState) => ({
+                selectedElementIds: makeNextSelectedElementIds(
+                  nextSelectedElementIds,
+                  prevState,
+                ),
+              }));
+              return;
+            }
+          }
+        }
+
         const arrowKeyPressed = isArrowKey(event.key);
 
         if (event[KEYS.CTRL_OR_CMD] && arrowKeyPressed && !event.shiftKey) {
@@ -9875,8 +9922,11 @@ class App extends React.Component<AppProps, AppState> {
                   }
                 }
 
-                // 选中矩形时自动选中内部元素
-                if (hitElement.type === "rectangle") {
+                // 按下 Ctrl 键选中矩形内部元素
+                if (
+                  hitElement.type === "rectangle" &&
+                  event[KEYS.CTRL_OR_CMD]
+                ) {
                   const innerElements = getElementsWithinSelection(
                     this.scene.getNonDeletedElements(),
                     hitElement,
@@ -11553,40 +11603,36 @@ class App extends React.Component<AppProps, AppState> {
           let shouldReuseSelection = true;
 
           if (!event.shiftKey && isSomeElementSelected(elements, this.state)) {
-            if (
-              pointerDownState.withCmdOrCtrl &&
-              pointerDownState.hit.element
-            ) {
-              this.setState((prevState) =>
-                selectGroupsForSelectedElements(
-                  {
-                    ...prevState,
-                    selectedElementIds: {
-                      [pointerDownState.hit.element!.id]: true,
-                    },
-                  },
-                  this.scene.getNonDeletedElements(),
-                  prevState,
-                  this,
-                ),
-              );
-            } else {
-              shouldReuseSelection = false;
-            }
+            // 注释掉：此功能会干扰按住Ctrl拉框选中矩形内部元素的功能
+            // if (
+            //   pointerDownState.withCmdOrCtrl &&
+            //   pointerDownState.hit.element
+            // ) {
+            //   this.setState((prevState) =>
+            //     selectGroupsForSelectedElements(
+            //       {
+            //         ...prevState,
+            //         selectedElementIds: {
+            //           [pointerDownState.hit.element!.id]: true,
+            //         },
+            //       },
+            //       this.scene.getNonDeletedElements(),
+            //       prevState,
+            //       this,
+            //     ),
+            //   );
+            // } else {
+            //   shouldReuseSelection = false;
+            // }
+            shouldReuseSelection = false;
           }
           const elementsWithinSelection = this.state.selectionElement
-            ? pointerDownState.withCmdOrCtrl
-              ? getElementsWithinSelection(
-                  elements,
-                  this.state.selectionElement,
-                  this.scene.getNonDeletedElementsMap(),
-                )
-              : getElementsOverlappingSelection(
-                  elements,
-                  this.state.selectionElement,
-                  this.scene.getNonDeletedElementsMap(),
-                  true,
-                )
+            ? getElementsOverlappingSelection(
+                elements,
+                this.state.selectionElement,
+                this.scene.getNonDeletedElementsMap(),
+                true,
+              )
             : [];
 
           const selectionElement = this.state.selectionElement;
@@ -11617,7 +11663,11 @@ class App extends React.Component<AppProps, AppState> {
               ),
             };
 
-            if (!elementsWithinSelection.length) {
+            // 只有在不按 Ctrl 且没有框选到任何元素时，才 fallback 到选中光标处的元素
+            if (
+              !elementsWithinSelection.length &&
+              !pointerDownState.withCmdOrCtrl
+            ) {
               const fallbackHit = this.getElementAtPosition(
                 pointerDownState.lastCoords.x,
                 pointerDownState.lastCoords.y,
@@ -11631,30 +11681,36 @@ class App extends React.Component<AppProps, AppState> {
             if (pointerDownState.hit.element) {
               // if using ctrl/cmd, select the hitElement only if we
               // haven't box-selected anything else
-              if (!elementsWithinSelection.length) {
+              // 按住 Ctrl 时不执行此 fallback 逻辑
+              if (
+                !elementsWithinSelection.length &&
+                !pointerDownState.withCmdOrCtrl
+              ) {
                 nextSelectedElementIds[pointerDownState.hit.element.id] = true;
-              } else {
+              } else if (elementsWithinSelection.length) {
                 delete nextSelectedElementIds[pointerDownState.hit.element.id];
               }
             }
 
-            // 框选时，如果选中了矩形，自动选中矩形内部的元素
-            const rectanglesInSelection = elementsWithinSelection.filter(
-              (el) => el.type === "rectangle",
-            );
-            rectanglesInSelection.forEach((rect) => {
-              const innerElements = getElementsWithinSelection(
-                this.scene.getNonDeletedElements(),
-                rect,
-                this.scene.getNonDeletedElementsMap(),
-                false,
+            // 框选时，按下 Ctrl 键才选中矩形内部的元素
+            if (pointerDownState.withCmdOrCtrl) {
+              const rectanglesInSelection = elementsWithinSelection.filter(
+                (el) => el.type === "rectangle",
               );
-              innerElements.forEach((el) => {
-                if (!el.locked && el.id !== rect.id) {
-                  nextSelectedElementIds[el.id] = true;
-                }
+              rectanglesInSelection.forEach((rect) => {
+                const innerElements = getElementsWithinSelection(
+                  this.scene.getNonDeletedElements(),
+                  rect,
+                  this.scene.getNonDeletedElementsMap(),
+                  false,
+                );
+                innerElements.forEach((el) => {
+                  if (!el.locked && el.id !== rect.id) {
+                    nextSelectedElementIds[el.id] = true;
+                  }
+                });
               });
-            });
+            }
 
             prevState = !shouldReuseSelection
               ? { ...prevState, selectedGroupIds: {}, editingGroupId: null }
