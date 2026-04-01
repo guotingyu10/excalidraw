@@ -474,6 +474,7 @@ export interface AppState {
   offsetLeft: number;
 
   fileHandle: FileSystemFileHandle | null;
+  fileSize: number | null;
   collaborators: Map<SocketId, Collaborator>;
   stats: {
     open: boolean;

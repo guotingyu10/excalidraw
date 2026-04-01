@@ -23,6 +23,7 @@ import { loadFromJSON, saveAsJSON } from "../data";
 import { isImageFileHandle } from "../data/blob";
 import { serializeAsJSON } from "../data/json";
 import { nativeFileSystemSupported } from "../data/filesystem";
+import { getFileSize } from "../data/fileSize";
 
 import { resaveAsImageWithScene } from "../data/resave";
 
@@ -335,6 +336,18 @@ export const actionSaveToActiveFile = register({
       if (isMockFileHandle) {
         const data = await exportedDataPromise;
         const json = serializeAsJSON(data.elements, data.appState || {}, data.files || {}, "local");
+        
+        // Electron 环境：保存到实际文件
+        const filePath = (previousFileHandle as any)?.path;
+        if (filePath && typeof window !== "undefined" && window.electronAPI) {
+          const writeResult = await window.electronAPI.writeFile(filePath, json);
+          if (!writeResult.success) {
+            throw new Error(writeResult.error || "保存文件失败");
+          }
+          console.log("[Electron] Saved to file:", filePath);
+        }
+        
+        // 同时保存到 localStorage 作为备份
         localStorage.setItem("excalidraw.lastFileName", filename);
         localStorage.setItem("excalidraw.lastFileContent", json);
         console.log("[DEBUG] Saved to localStorage:", filename);
@@ -353,10 +366,13 @@ export const actionSaveToActiveFile = register({
         fileHandle = result.fileHandle;
       }
 
+      const fileSizeInfo = await getFileSize(fileHandle);
+
       return {
         captureUpdate: CaptureUpdateAction.NEVER,
         appState: {
           fileHandle,
+          fileSize: fileSizeInfo?.size ?? null,
           toast: {
             message:
               previousFileHandle && fileHandle?.name
@@ -413,11 +429,14 @@ export const actionSaveFileToDisk = register({
         fileHandle: null,
       });
 
+      const fileSizeInfo = await getFileSize(savedFileHandle);
+
       return {
         captureUpdate: CaptureUpdateAction.NEVER,
         appState: {
           openDialog: null,
           fileHandle: savedFileHandle,
+          fileSize: fileSizeInfo?.size ?? null,
           toast: { message: t("toast.fileSaved") },
         },
       };
@@ -473,8 +492,12 @@ export const actionLoadScene = register({
         files,
       } = await loadFromJSON(appState, elements);
 
-      const fileName = loadedAppState?.name || "Untitled";
-      const mockFileHandle = { name: fileName } as FileSystemFileHandle;
+      // 使用从 loadFromJSON 返回的 fileHandle（包含 path 属性）
+      const fileHandle = loadedAppState?.fileHandle;
+      const fileName = fileHandle?.name || loadedAppState?.name || "Untitled";
+
+      // 获取文件大小
+      const fileSizeInfo = await getFileSize(fileHandle);
 
       try {
         const json = serializeAsJSON(loadedElements, loadedAppState || {}, files || {}, "local");
@@ -487,7 +510,11 @@ export const actionLoadScene = register({
 
       return {
         elements: loadedElements,
-        appState: { ...loadedAppState, fileHandle: mockFileHandle },
+        appState: { 
+          ...loadedAppState, 
+          fileHandle,
+          fileSize: fileSizeInfo?.size ?? null,
+        },
         files,
         captureUpdate: CaptureUpdateAction.IMMEDIATELY,
       };

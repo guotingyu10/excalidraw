@@ -1,3 +1,7 @@
+/// <reference path="../../electron/electron.d.ts" />
+
+/// <reference path="../../electron/electron.d.ts" />
+
 import {
   clearAppStateForLocalStorage,
   getDefaultAppState,
@@ -59,6 +63,25 @@ export const importFromLocalStorage = () => {
   let savedState = null;
 
   try {
+    // Electron 环境：优先从 lastFileContent 恢复
+    if (typeof window !== "undefined" && window.electronAPI) {
+      const lastFileContent = localStorage.getItem("excalidraw.lastFileContent");
+      if (lastFileContent) {
+        try {
+          const parsed = JSON.parse(lastFileContent);
+          if (parsed && parsed.elements) {
+            console.log("[Electron] Restoring from lastFileContent");
+            return {
+              elements: parsed.elements || [],
+              appState: parsed.appState || null,
+            };
+          }
+        } catch (e) {
+          console.error("[Electron] Failed to parse lastFileContent:", e);
+        }
+      }
+    }
+
     savedElements = localStorage.getItem(STORAGE_KEYS.LOCAL_STORAGE_ELEMENTS);
     savedState = localStorage.getItem(STORAGE_KEYS.LOCAL_STORAGE_APP_STATE);
   } catch (error: any) {

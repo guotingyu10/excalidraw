@@ -1,5 +1,6 @@
-const { app, BrowserWindow, Menu, protocol } = require('electron');
+const { app, BrowserWindow, Menu, protocol, ipcMain, dialog } = require('electron');
 const path = require('path');
+const fs = require('fs');
 
 let mainWindow;
 
@@ -19,6 +20,7 @@ function createWindow() {
       disableBlinkFeatures: 'CacheStorage',
       hardwareAcceleration: true,
       experimentalFeatures: true,
+      preload: path.join(__dirname, 'preload.js'),
     },
     show: false,
     icon: path.join(__dirname, '../excalidraw-app/public/favicon.png'),
@@ -168,6 +170,86 @@ function createMenu() {
   const menu = Menu.buildFromTemplate(template);
   Menu.setApplicationMenu(menu);
 }
+
+ipcMain.handle('get-file-size', async (event, filePath) => {
+  try {
+    const stats = await fs.promises.stat(filePath);
+    return {
+      success: true,
+      size: stats.size,
+      lastModified: stats.mtimeMs,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error.message,
+    };
+  }
+});
+
+ipcMain.handle('show-save-dialog', async (event, options) => {
+  try {
+    const result = await dialog.showSaveDialog(mainWindow, {
+      title: options.title || '保存文件',
+      defaultPath: options.defaultPath || 'untitled.excalidraw',
+      filters: options.filters || [
+        { name: 'Excalidraw', extensions: ['excalidraw'] },
+        { name: '所有文件', extensions: ['*'] }
+      ],
+    });
+    return {
+      success: !result.canceled,
+      filePath: result.filePath,
+      canceled: result.canceled,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error.message,
+    };
+  }
+});
+
+ipcMain.handle('show-open-dialog', async (event, options) => {
+  try {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: options.title || '打开文件',
+      filters: options.filters || [
+        { name: 'Excalidraw', extensions: ['excalidraw'] },
+        { name: '所有文件', extensions: ['*'] }
+      ],
+      properties: ['openFile'],
+    });
+    return {
+      success: !result.canceled,
+      filePaths: result.filePaths,
+      canceled: result.canceled,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error.message,
+    };
+  }
+});
+
+ipcMain.handle('write-file', async (event, filePath, data) => {
+  try {
+    await fs.promises.writeFile(filePath, data, 'utf-8');
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('read-file', async (event, filePath) => {
+  try {
+    const data = await fs.promises.readFile(filePath, 'utf-8');
+    return { success: true, data };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
 
 app.whenReady().then(() => {
   protocol.registerFileProtocol('app', (request, callback) => {

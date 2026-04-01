@@ -27,6 +27,7 @@ import { useAtom, useAtomValue } from "../editor-jotai";
 
 import { t } from "../i18n";
 import { calculateScrollCenter } from "../scene";
+import { formatFileSize } from "../data/fileSize";
 
 import {
   SelectedShapeActions,
@@ -326,6 +327,17 @@ const LayerUI = ({
           readOnly
           aria-label={t("labels.editFileName")}
         />
+        {appState.fileSize !== null && (
+          <span
+            style={{
+              fontSize: "12px",
+              color: "var(--color-gray-60)",
+              marginLeft: "4px",
+            }}
+          >
+            ({formatFileSize(appState.fileSize)})
+          </span>
+        )}
       </div>
     );
   };

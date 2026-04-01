@@ -31,8 +31,10 @@ echo.
 echo 提示：
 echo - 开发服务器将在 http://localhost:3000 启动
 echo - Electron 窗口会自动打开
+echo - 浏览器不会自动打开
 echo - 按 Ctrl+C 停止
 echo.
 
+set BROWSER=none
 call yarn electron:dev
 pause
