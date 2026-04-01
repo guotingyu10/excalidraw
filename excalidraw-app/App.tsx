@@ -233,13 +233,13 @@ const initializeScene = async (opts: {
   let scene: any = null;
   let localDataState: { elements: any; appState: any } | null = null;
 
-  // 优先级 1: Electron 环境 - 从会话恢复上次打开的文件
+  // 优先级1: Electron 环境 - 从会话恢复上次打开的文件
   if (typeof window !== "undefined" && window.electronAPI) {
     try {
       const sessionResult = await window.electronAPI.getSession();
       if (sessionResult.success && sessionResult.session?.lastActiveFile) {
         const filePath = sessionResult.session.lastActiveFile;
-        console.log("[Electron] Restoring last active file:", filePath);
+        // console.log("[Electron] Restoring last active file:", filePath);
         
         try {
           const fileResult = await window.electronAPI.readFile(filePath);
@@ -262,7 +262,7 @@ const initializeScene = async (opts: {
               },
               files: loadedData.files,
             };
-            console.log("[Electron] Restored file:", fileName);
+            // console.log("[Electron] Restored file:", fileName);
           }
         } catch (e) {
           console.error("[Electron] Failed to restore file:", e);
@@ -273,7 +273,7 @@ const initializeScene = async (opts: {
     }
   }
 
-  // 优先级 2: 从 localStorage 恢复（如果 Electron 会话恢复失败）
+  // 优先级2: 从 localStorage 恢复（如果 Electron 会话恢复失败）
   if (!scene) {
     localDataState = importFromLocalStorage();
     scene = localDataState || {
@@ -805,7 +805,7 @@ const ExcalidrawWrapper = () => {
   );
 
   // ---------------------------------------------------------------------------
-  // onExport — intercepts file save to wait for pending image loads
+  // onExport �?intercepts file save to wait for pending image loads
   // ---------------------------------------------------------------------------
   const onExport: Required<ExcalidrawProps>["onExport"] = useCallback(
     async function* () {

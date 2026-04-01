@@ -344,7 +344,7 @@ export const actionSaveToActiveFile = register({
           if (!writeResult.success) {
             throw new Error(writeResult.error || "保存文件失败");
           }
-          console.log("[Electron] Saved to file:", filePath);
+          // console.log("[Electron] Saved to file:", filePath);
           
           // 保存会话状态
           try {
@@ -360,7 +360,7 @@ export const actionSaveToActiveFile = register({
         // 同时保存到 localStorage 作为备份
         localStorage.setItem("excalidraw.lastFileName", filename);
         localStorage.setItem("excalidraw.lastFileContent", json);
-        console.log("[DEBUG] Saved to localStorage:", filename);
+        // console.log("[DEBUG] Saved to localStorage:", filename);
       } else {
         const result = isImageFileHandle(previousFileHandle)
           ? await resaveAsImageWithScene(
@@ -449,7 +449,7 @@ export const actionSaveFileToDisk = register({
             lastOpenedFiles: [filePath],
             lastActiveFile: filePath,
           });
-          console.log("[Electron] Session saved:", filePath);
+          // console.log("[Electron] Session saved:", filePath);
         } catch (e) {
           console.error("[Electron] Failed to save session:", e);
         }
@@ -531,7 +531,7 @@ export const actionLoadScene = register({
             lastOpenedFiles: [filePath],
             lastActiveFile: filePath,
           });
-          console.log("[Electron] Session saved:", filePath);
+          // console.log("[Electron] Session saved:", filePath);
         } catch (e) {
           console.error("[Electron] Failed to save session:", e);
         }
@@ -541,7 +541,7 @@ export const actionLoadScene = register({
         const json = serializeAsJSON(loadedElements, loadedAppState || {}, files || {}, "local");
         localStorage.setItem("excalidraw.lastFileName", fileName);
         localStorage.setItem("excalidraw.lastFileContent", json);
-        console.log("[DEBUG] loadScene saved to localStorage:", fileName);
+        // console.log("[DEBUG] loadScene saved to localStorage:", fileName);
       } catch (e) {
         console.error("[DEBUG] Failed to save to localStorage:", e);
       }

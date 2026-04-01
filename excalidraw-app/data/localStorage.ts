@@ -70,7 +70,7 @@ export const importFromLocalStorage = () => {
         try {
           const parsed = JSON.parse(lastFileContent);
           if (parsed && parsed.elements) {
-            console.log("[Electron] Restoring from lastFileContent");
+            // console.log("[Electron] Restoring from lastFileContent");
             return {
               elements: parsed.elements || [],
               appState: parsed.appState || null,

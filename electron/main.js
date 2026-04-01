@@ -21,7 +21,7 @@ const readSession = () => {
       return JSON.parse(data);
     }
   } catch (error) {
-    console.error('[Session] Failed to read session:', error);
+    // console.error('[Session] Failed to read session:', error);
   }
   return { lastOpenedFiles: [], lastActiveFile: null };
 };
@@ -35,10 +35,10 @@ const saveSession = (sessionData) => {
       fs.mkdirSync(dir, { recursive: true });
     }
     fs.writeFileSync(sessionPath, JSON.stringify(sessionData, null, 2), 'utf-8');
-    console.log('[Session] Saved:', sessionPath);
+    // console.log('[Session] Saved:', sessionPath);
     return { success: true };
   } catch (error) {
-    console.error('[Session] Failed to save session:', error);
+    // console.error('[Session] Failed to save session:', error);
     return { success: false, error: error.message };
   }
 };
@@ -60,16 +60,15 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
     },
     show: false,
-    icon: path.join(__dirname, '../excalidraw-app/public/favicon.png'),
+    icon: path.join(__dirname, 'icon.png'),
   });
 
-  mainWindow.webContents.setBackgroundThrottling(false);
-
+  // 开发模式
   if (isDev) {
     mainWindow.loadURL('http://localhost:3000');
     mainWindow.webContents.openDevTools();
   } else {
-    mainWindow.loadFile(path.join(__dirname, '../excalidraw-app/build/index.html'));
+    mainWindow.loadURL(`app://./index.html`);
   }
 
   mainWindow.once('ready-to-show', () => {
@@ -80,10 +79,7 @@ function createWindow() {
     mainWindow = null;
   });
 
-  createMenu();
-}
-
-function createMenu() {
+  // 创建菜单
   const template = [
     {
       label: '文件',
@@ -98,8 +94,20 @@ function createMenu() {
         {
           label: '打开',
           accelerator: 'CmdOrCtrl+O',
-          click: () => {
-            mainWindow.webContents.send('open-drawing');
+          click: async () => {
+            const result = await dialog.showOpenDialog(mainWindow, {
+              title: '打开文件',
+              filters: [
+                { name: 'Excalidraw', extensions: ['excalidraw'] },
+                { name: '所有文件', extensions: ['*'] }
+              ],
+              properties: ['openFile'],
+            });
+            if (!result.canceled && result.filePaths.length > 0) {
+              const filePath = result.filePaths[0];
+              const content = fs.readFileSync(filePath, 'utf-8');
+              mainWindow.webContents.send('open-drawing', { filePath, content });
+            }
           }
         },
         {
@@ -109,10 +117,17 @@ function createMenu() {
             mainWindow.webContents.send('save-drawing');
           }
         },
+        {
+          label: '另存为',
+          accelerator: 'CmdOrCtrl+Shift+S',
+          click: () => {
+            mainWindow.webContents.send('save-drawing-as');
+          }
+        },
         { type: 'separator' },
         {
-          label: '导出为图片',
-          accelerator: 'CmdOrCtrl+Shift+S',
+          label: '导出图片',
+          accelerator: 'CmdOrCtrl+E',
           click: () => {
             mainWindow.webContents.send('export-image');
           }
@@ -120,7 +135,7 @@ function createMenu() {
         { type: 'separator' },
         {
           label: '退出',
-          accelerator: process.platform === 'darwin' ? 'Cmd+Q' : 'Ctrl+Q',
+          accelerator: 'CmdOrCtrl+Q',
           click: () => {
             app.quit();
           }
@@ -136,7 +151,7 @@ function createMenu() {
         { label: '剪切', accelerator: 'CmdOrCtrl+X', role: 'cut' },
         { label: '复制', accelerator: 'CmdOrCtrl+C', role: 'copy' },
         { label: '粘贴', accelerator: 'CmdOrCtrl+V', role: 'paste' },
-        { label: '全选', accelerator: 'CmdOrCtrl+A', role: 'selectall' }
+        { label: '全选', accelerator: 'CmdOrCtrl+A', role: 'selectAll' }
       ]
     },
     {
@@ -165,13 +180,7 @@ function createMenu() {
         },
         { type: 'separator' },
         { label: '全屏', accelerator: 'F11', role: 'togglefullscreen' },
-        {
-          label: '开发者工具',
-          accelerator: 'F12',
-          click: () => {
-            mainWindow.webContents.toggleDevTools();
-          }
-        }
+        { label: '开发者工具', accelerator: 'F12', role: 'toggleDevTools' }
       ]
     },
     {
@@ -187,43 +196,28 @@ function createMenu() {
     }
   ];
 
-  if (process.platform === 'darwin') {
-    template.unshift({
-      label: app.getName(),
-      submenu: [
-        { role: 'about' },
-        { type: 'separator' },
-        { role: 'services' },
-        { type: 'separator' },
-        { role: 'hide' },
-        { role: 'hideothers' },
-        { role: 'unhide' },
-        { type: 'separator' },
-        { role: 'quit' }
-      ]
-    });
-  }
-
   const menu = Menu.buildFromTemplate(template);
   Menu.setApplicationMenu(menu);
 }
 
+// 获取文件大小
 ipcMain.handle('get-file-size', async (event, filePath) => {
   try {
-    const stats = await fs.promises.stat(filePath);
+    if (!filePath || !fs.existsSync(filePath)) {
+      return { success: false, error: 'File not found' };
+    }
+    const stats = fs.statSync(filePath);
     return {
       success: true,
       size: stats.size,
-      lastModified: stats.mtimeMs,
+      lastModified: stats.mtime.getTime(),
     };
   } catch (error) {
-    return {
-      success: false,
-      error: error.message,
-    };
+    return { success: false, error: error.message };
   }
 });
 
+// 显示保存对话框
 ipcMain.handle('show-save-dialog', async (event, options) => {
   try {
     const result = await dialog.showSaveDialog(mainWindow, {
@@ -240,13 +234,11 @@ ipcMain.handle('show-save-dialog', async (event, options) => {
       canceled: result.canceled,
     };
   } catch (error) {
-    return {
-      success: false,
-      error: error.message,
-    };
+    return { success: false, error: error.message };
   }
 });
 
+// 显示打开对话框
 ipcMain.handle('show-open-dialog', async (event, options) => {
   try {
     const result = await dialog.showOpenDialog(mainWindow, {
@@ -263,25 +255,24 @@ ipcMain.handle('show-open-dialog', async (event, options) => {
       canceled: result.canceled,
     };
   } catch (error) {
-    return {
-      success: false,
-      error: error.message,
-    };
+    return { success: false, error: error.message };
   }
 });
 
+// 写入文件
 ipcMain.handle('write-file', async (event, filePath, data) => {
   try {
-    await fs.promises.writeFile(filePath, data, 'utf-8');
+    fs.writeFileSync(filePath, data, 'utf-8');
     return { success: true };
   } catch (error) {
     return { success: false, error: error.message };
   }
 });
 
+// 读取文件
 ipcMain.handle('read-file', async (event, filePath) => {
   try {
-    const data = await fs.promises.readFile(filePath, 'utf-8');
+    const data = fs.readFileSync(filePath, 'utf-8');
     return { success: true, data };
   } catch (error) {
     return { success: false, error: error.message };
@@ -310,12 +301,6 @@ app.whenReady().then(() => {
   });
 
   createWindow();
-
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
-    }
-  });
 });
 
 app.on('window-all-closed', () => {
@@ -324,7 +309,8 @@ app.on('window-all-closed', () => {
   }
 });
 
-app.commandLine.appendSwitch('disable-gpu-vsync');
-app.commandLine.appendSwitch('disable-features', 'VsyncThread');
-app.commandLine.appendSwitch('enable-features', 'CanvasOopRasterization');
-app.commandLine.appendSwitch('enable-unsafe-webgpu');
+app.on('activate', () => {
+  if (mainWindow === null) {
+    createWindow();
+  }
+});

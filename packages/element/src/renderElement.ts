@@ -648,7 +648,7 @@ const generateElementCanvas = (
   renderConfig: StaticCanvasRenderConfig,
   appState: StaticCanvasAppState | InteractiveCanvasAppState,
 ): ExcalidrawElementWithCanvas | null => {
-  console.log("[DEBUG-generateElementCanvas] Called with type:", element.type, "id:", element.id, "isExporting:", renderConfig.isExporting);
+  // console.log("[DEBUG-generateElementCanvas] Called with type:", element.type, "id:", element.id, "isExporting:", renderConfig.isExporting);
   const canvas = document.createElement("canvas");
   const context = canvas.getContext("2d")!;
   const padding = getCanvasPadding(element);
@@ -840,7 +840,7 @@ const drawElementOnCanvas = (
   elementsMap: ElementsMap,
   appState: StaticCanvasAppState | InteractiveCanvasAppState,
 ) => {
-  console.log("[DEBUG-drawElementOnCanvas] Called with type:", element.type, "id:", element.id, "isExporting:", renderConfig.isExporting);
+  // console.log("[DEBUG-drawElementOnCanvas] Called with type:", element.type, "id:", element.id, "isExporting:", renderConfig.isExporting);
   switch (element.type) {
     case "rectangle":
     case "iframe":
@@ -1340,7 +1340,7 @@ const drawElementOnCanvas = (
           );
           context.restore();
 
-          console.log("[DEBUG] Drawing largeText marker for text-large element, fontSize:", textLargeElement.fontSize);
+          // console.log("[DEBUG] Drawing largeText marker for text-large element, fontSize:", textLargeElement.fontSize);
           context.save();
           context.fillStyle = "#e63946";
           context.font = `bold ${Math.max(10, textLargeElement.fontSize * 0.6)}px sans-serif`;
@@ -1443,7 +1443,7 @@ const drawElementFromCanvas = (
   allElementsMap: NonDeletedSceneElementsMap,
 ) => {
   const element = elementWithCanvas.element;
-  console.log("[DEBUG-drawElementFromCanvas] Called with type:", element.type, "id:", element.id);
+  // console.log("[DEBUG-drawElementFromCanvas] Called with type:", element.type, "id:", element.id);
   const padding = getCanvasPadding(element);
   const zoom = elementWithCanvas.scale;
   const [x1, y1, x2, y2] = getElementAbsoluteCoords(element, allElementsMap);
@@ -1600,9 +1600,9 @@ export const renderElement = (
   renderConfig: StaticCanvasRenderConfig,
   appState: StaticCanvasAppState | InteractiveCanvasAppState,
 ) => {
-  console.log("[DEBUG-renderElement] Called with element type:", element.type, "id:", element.id);
+  // console.log("[DEBUG-renderElement] Called with element type:", element.type, "id:", element.id);
   if (element.type === "text-large") {
-    console.log("[DEBUG-renderElement] text-large element detected, isExporting:", renderConfig.isExporting, "renderTextViaDOM:", renderConfig.renderTextViaDOM);
+    // console.log("[DEBUG-renderElement] text-large element detected, isExporting:", renderConfig.isExporting, "renderTextViaDOM:", renderConfig.renderTextViaDOM);
   }
 
   if (
@@ -1610,7 +1610,7 @@ export const renderElement = (
     !renderConfig.isExporting &&
     renderConfig.renderTextViaDOM
   ) {
-    console.log("[DEBUG-renderElement] Early return for text with renderTextViaDOM");
+    // console.log("[DEBUG-renderElement] Early return for text with renderTextViaDOM");
     return;
   }
 
@@ -1836,10 +1836,10 @@ export const renderElement = (
         // not exporting → optimized rendering (cache & render from element
         // canvases)
       } else {
-        console.log("[DEBUG-renderElement] NOT exporting, element type:", element.type);
+        // console.log("[DEBUG-renderElement] NOT exporting, element type:", element.type);
         //文本框增量换行,逐行渲染2026.3.28
         if (element.type === "text" && !renderConfig.renderTextViaDOM) {
-          console.log("[DEBUG-renderElement] Taking text path with drawElementOnCanvas");
+          // console.log("[DEBUG-renderElement] Taking text path with drawElementOnCanvas");
           const [x1, y1, x2, y2] = getElementAbsoluteCoords(
             element,
             elementsMap,
@@ -1877,7 +1877,7 @@ export const renderElement = (
           break;
         }
 
-        console.log("[DEBUG-renderElement] Taking generateElementWithCanvas path for:", element.type);
+        // console.log("[DEBUG-renderElement] Taking generateElementWithCanvas path for:", element.type);
         const elementWithCanvas = generateElementWithCanvas(
           element,
           allElementsMap,
