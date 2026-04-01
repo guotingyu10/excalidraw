@@ -53,6 +53,7 @@ import {
   supportsResizeObserver,
   DEFAULT_COLLISION_THRESHOLD,
   DEFAULT_TEXT_ALIGN,
+  DEFAULT_FONT_SIZE,
   ARROW_TYPE,
   DEFAULT_REDUCED_GLOBAL_ALPHA,
   isLocalLink,
@@ -4351,7 +4352,7 @@ class App extends React.Component<AppProps, AppState> {
       roughness: this.state.currentItemRoughness,
       opacity: this.state.currentItemOpacity,
       text,
-      fontSize: this.state.currentItemFontSize,
+      fontSize: DEFAULT_FONT_SIZE,
       fontFamily: this.state.currentItemFontFamily,
       textAlign: DEFAULT_TEXT_ALIGN,
       verticalAlign: DEFAULT_VERTICAL_ALIGN,
@@ -7331,7 +7332,7 @@ class App extends React.Component<AppProps, AppState> {
 
     const lineHeight =
       existingTextElement?.lineHeight || getLineHeight(fontFamily);
-    const fontSize = this.state.currentItemFontSize;
+    const fontSize = DEFAULT_FONT_SIZE;
 
     if (
       !existingTextElement &&
@@ -9874,6 +9875,21 @@ class App extends React.Component<AppProps, AppState> {
                   }
                 }
 
+                // 选中矩形时自动选中内部元素
+                if (hitElement.type === "rectangle") {
+                  const innerElements = getElementsWithinSelection(
+                    this.scene.getNonDeletedElements(),
+                    hitElement,
+                    this.scene.getNonDeletedElementsMap(),
+                    false,
+                  );
+                  innerElements.forEach((el) => {
+                    if (!el.locked && el.id !== hitElement.id) {
+                      nextSelectedElementIds[el.id] = true;
+                    }
+                  });
+                }
+
                 return {
                   ...selectGroupsForSelectedElements(
                     {
@@ -11621,6 +11637,24 @@ class App extends React.Component<AppProps, AppState> {
                 delete nextSelectedElementIds[pointerDownState.hit.element.id];
               }
             }
+
+            // 框选时，如果选中了矩形，自动选中矩形内部的元素
+            const rectanglesInSelection = elementsWithinSelection.filter(
+              (el) => el.type === "rectangle",
+            );
+            rectanglesInSelection.forEach((rect) => {
+              const innerElements = getElementsWithinSelection(
+                this.scene.getNonDeletedElements(),
+                rect,
+                this.scene.getNonDeletedElementsMap(),
+                false,
+              );
+              innerElements.forEach((el) => {
+                if (!el.locked && el.id !== rect.id) {
+                  nextSelectedElementIds[el.id] = true;
+                }
+              });
+            });
 
             prevState = !shouldReuseSelection
               ? { ...prevState, selectedGroupIds: {}, editingGroupId: null }

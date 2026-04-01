@@ -1,3 +1,8 @@
+interface SessionData {
+  lastOpenedFiles: string[];
+  lastActiveFile: string | null;
+}
+
 interface ElectronAPI {
   getFileSize: (filePath: string) => Promise<{
     success: boolean;
@@ -33,6 +38,22 @@ interface ElectronAPI {
     data?: string;
     error?: string;
   }>;
+  // 会话管理
+  getSession: () => Promise<{
+    success: boolean;
+    session?: SessionData;
+    error?: string;
+  }>;
+  saveSession: (sessionData: SessionData) => Promise<{
+    success: boolean;
+    error?: string;
+  }>;
+  getSessionPath: () => Promise<{
+    success: boolean;
+    path?: string;
+    error?: string;
+  }>;
+  // 事件监听
   onNewDrawing: (callback: () => void) => void;
   onOpenDrawing: (callback: () => void) => void;
   onSaveDrawing: (callback: () => void) => void;

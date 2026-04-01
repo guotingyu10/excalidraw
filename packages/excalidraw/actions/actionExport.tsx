@@ -345,6 +345,16 @@ export const actionSaveToActiveFile = register({
             throw new Error(writeResult.error || "保存文件失败");
           }
           console.log("[Electron] Saved to file:", filePath);
+          
+          // 保存会话状态
+          try {
+            await window.electronAPI.saveSession({
+              lastOpenedFiles: [filePath],
+              lastActiveFile: filePath,
+            });
+          } catch (e) {
+            console.error("[Electron] Failed to save session:", e);
+          }
         }
         
         // 同时保存到 localStorage 作为备份
@@ -431,6 +441,20 @@ export const actionSaveFileToDisk = register({
 
       const fileSizeInfo = await getFileSize(savedFileHandle);
 
+      // Electron 环境：保存会话状态
+      const filePath = (savedFileHandle as any)?.path;
+      if (filePath && typeof window !== "undefined" && window.electronAPI) {
+        try {
+          await window.electronAPI.saveSession({
+            lastOpenedFiles: [filePath],
+            lastActiveFile: filePath,
+          });
+          console.log("[Electron] Session saved:", filePath);
+        } catch (e) {
+          console.error("[Electron] Failed to save session:", e);
+        }
+      }
+
       return {
         captureUpdate: CaptureUpdateAction.NEVER,
         appState: {
@@ -498,6 +522,20 @@ export const actionLoadScene = register({
 
       // 获取文件大小
       const fileSizeInfo = await getFileSize(fileHandle);
+
+      // Electron 环境：保存会话状态
+      const filePath = (fileHandle as any)?.path;
+      if (filePath && typeof window !== "undefined" && window.electronAPI) {
+        try {
+          await window.electronAPI.saveSession({
+            lastOpenedFiles: [filePath],
+            lastActiveFile: filePath,
+          });
+          console.log("[Electron] Session saved:", filePath);
+        } catch (e) {
+          console.error("[Electron] Failed to save session:", e);
+        }
+      }
 
       try {
         const json = serializeAsJSON(loadedElements, loadedAppState || {}, files || {}, "local");

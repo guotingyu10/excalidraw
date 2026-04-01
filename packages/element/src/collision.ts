@@ -83,6 +83,11 @@ export const shouldTestInside = (element: ExcalidrawElement) => {
     return false;
   }
 
+  // 矩形只能通过边框选中，不能通过点击内部选中
+  if (element.type === "rectangle") {
+    return false;
+  }
+
   const isDraggableFromInside =
     !isTransparent(element.backgroundColor) ||
     hasBoundTextElement(element) ||

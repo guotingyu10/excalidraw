@@ -229,13 +229,61 @@ const initializeScene = async (opts: {
   );
   const externalUrlMatch = window.location.hash.match(/^#url=(.*)$/);
 
-  const localDataState = importFromLocalStorage();
-
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let scene: any = localDataState || {
-    elements: [],
-    appState: null,
-  };
+  let scene: any = null;
+  let localDataState: { elements: any; appState: any } | null = null;
+
+  // 优先级 1: Electron 环境 - 从会话恢复上次打开的文件
+  if (typeof window !== "undefined" && window.electronAPI) {
+    try {
+      const sessionResult = await window.electronAPI.getSession();
+      if (sessionResult.success && sessionResult.session?.lastActiveFile) {
+        const filePath = sessionResult.session.lastActiveFile;
+        console.log("[Electron] Restoring last active file:", filePath);
+        
+        try {
+          const fileResult = await window.electronAPI.readFile(filePath);
+          if (fileResult.success && fileResult.data) {
+            const blob = new Blob([fileResult.data], { type: "application/json" });
+            const { loadFromBlob } = await import("@excalidraw/excalidraw/data/blob");
+            const loadedData = await loadFromBlob(blob, null, null);
+            
+            const fileName = filePath.split(/[/\\]/).pop() || "untitled.excalidraw";
+            const mockFileHandle = {
+              name: fileName,
+              path: filePath,
+            } as unknown as FileSystemFileHandle;
+            
+            scene = {
+              elements: loadedData.elements,
+              appState: {
+                ...loadedData.appState,
+                fileHandle: mockFileHandle,
+              },
+              files: loadedData.files,
+            };
+            console.log("[Electron] Restored file:", fileName);
+          }
+        } catch (e) {
+          console.error("[Electron] Failed to restore file:", e);
+        }
+      }
+    } catch (e) {
+      console.error("[Electron] Failed to get session:", e);
+    }
+  }
+
+  // 优先级 2: 从 localStorage 恢复（如果 Electron 会话恢复失败）
+  if (!scene) {
+    localDataState = importFromLocalStorage();
+    scene = localDataState || {
+      elements: [],
+      appState: null,
+    };
+  } else {
+    // Electron 会话恢复成功，但仍需读取 localStorage 用于合并主题等设置
+    localDataState = importFromLocalStorage();
+  }
 
   let roomLinkData = getCollaborationLinkData(window.location.href);
   const isExternalScene = !!(id || jsonBackendMatch || roomLinkData);

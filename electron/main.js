@@ -6,6 +6,43 @@ let mainWindow;
 
 const isDev = !app.isPackaged;
 
+// 会话存储路径
+const getSessionFilePath = () => {
+  const userDataPath = app.getPath('userData');
+  return path.join(userDataPath, 'session.json');
+};
+
+// 读取会话状态
+const readSession = () => {
+  try {
+    const sessionPath = getSessionFilePath();
+    if (fs.existsSync(sessionPath)) {
+      const data = fs.readFileSync(sessionPath, 'utf-8');
+      return JSON.parse(data);
+    }
+  } catch (error) {
+    console.error('[Session] Failed to read session:', error);
+  }
+  return { lastOpenedFiles: [], lastActiveFile: null };
+};
+
+// 保存会话状态
+const saveSession = (sessionData) => {
+  try {
+    const sessionPath = getSessionFilePath();
+    const dir = path.dirname(sessionPath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    fs.writeFileSync(sessionPath, JSON.stringify(sessionData, null, 2), 'utf-8');
+    console.log('[Session] Saved:', sessionPath);
+    return { success: true };
+  } catch (error) {
+    console.error('[Session] Failed to save session:', error);
+    return { success: false, error: error.message };
+  }
+};
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1400,
@@ -249,6 +286,20 @@ ipcMain.handle('read-file', async (event, filePath) => {
   } catch (error) {
     return { success: false, error: error.message };
   }
+});
+
+// 会话管理 IPC
+ipcMain.handle('get-session', async () => {
+  const session = readSession();
+  return { success: true, session };
+});
+
+ipcMain.handle('save-session', async (event, sessionData) => {
+  return saveSession(sessionData);
+});
+
+ipcMain.handle('get-session-path', async () => {
+  return { success: true, path: getSessionFilePath() };
 });
 
 app.whenReady().then(() => {

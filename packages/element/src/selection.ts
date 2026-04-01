@@ -28,6 +28,46 @@ import type {
   NonDeletedExcalidrawElement,
 } from "./types";
 
+const selectionIntersectsRectangleOutline = (
+  selectionX1: number,
+  selectionY1: number,
+  selectionX2: number,
+  selectionY2: number,
+  element: ExcalidrawElement,
+): boolean => {
+  const [ex1, ey1, ex2, ey2] = [
+    element.x,
+    element.y,
+    element.x + element.width,
+    element.y + element.height,
+  ];
+
+  const threshold = 5;
+
+  const selectionTouchesTopEdge =
+    selectionY1 <= ey1 + threshold && selectionY2 >= ey1 - threshold &&
+    !(selectionX2 < ex1 || selectionX1 > ex2);
+
+  const selectionTouchesBottomEdge =
+    selectionY1 <= ey2 + threshold && selectionY2 >= ey2 - threshold &&
+    !(selectionX2 < ex1 || selectionX1 > ex2);
+
+  const selectionTouchesLeftEdge =
+    selectionX1 <= ex1 + threshold && selectionX2 >= ex1 - threshold &&
+    !(selectionY2 < ey1 || selectionY1 > ey2);
+
+  const selectionTouchesRightEdge =
+    selectionX1 <= ex2 + threshold && selectionX2 >= ex2 - threshold &&
+    !(selectionY2 < ey1 || selectionY1 > ey2);
+
+  return (
+    selectionTouchesTopEdge ||
+    selectionTouchesBottomEdge ||
+    selectionTouchesLeftEdge ||
+    selectionTouchesRightEdge
+  );
+};
+
 /**
  * Frames and their containing elements are not to be selected at the same time.
  * Given an array of selected elements, if there are frames and their containing elements
@@ -83,15 +123,30 @@ export const getElementsWithinSelection = (
       elementY2 = Math.min(fy2, elementY2);
     }
 
-    return (
+    const basicCheck =
       element.locked === false &&
       element.type !== "selection" &&
       !isBoundToContainer(element) &&
       selectionX1 <= elementX1 &&
       selectionY1 <= elementY1 &&
       selectionX2 >= elementX2 &&
-      selectionY2 >= elementY2
-    );
+      selectionY2 >= elementY2;
+
+    if (!basicCheck) {
+      return false;
+    }
+
+    if (element.type === "rectangle") {
+      return selectionIntersectsRectangleOutline(
+        selectionX1,
+        selectionY1,
+        selectionX2,
+        selectionY2,
+        element,
+      );
+    }
+
+    return true;
   });
 
   elementsInSelection = excludeElementsInFrames
@@ -139,15 +194,30 @@ export const getElementsOverlappingSelection = (
       elementY2 = Math.min(fy2, elementY2);
     }
 
-    return (
+    const basicCheck =
       element.locked === false &&
       element.type !== "selection" &&
       !isBoundToContainer(element) &&
       selectionX1 <= elementX2 &&
       selectionY1 <= elementY2 &&
       selectionX2 >= elementX1 &&
-      selectionY2 >= elementY1
-    );
+      selectionY2 >= elementY1;
+
+    if (!basicCheck) {
+      return false;
+    }
+
+    if (element.type === "rectangle") {
+      return selectionIntersectsRectangleOutline(
+        selectionX1,
+        selectionY1,
+        selectionX2,
+        selectionY2,
+        element,
+      );
+    }
+
+    return true;
   });
 
   elementsInSelection = excludeElementsInFrames
