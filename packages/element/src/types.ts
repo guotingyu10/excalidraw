@@ -193,6 +193,7 @@ export type ExcalidrawRectanguloidElement =
   | ExcalidrawImageElement
   | ExcalidrawTextElement
   | ExcalidrawTextLargeElement
+  | ExcalidrawTextNativeElement
   | ExcalidrawFreeDrawElement
   | ExcalidrawIframeLikeElement
   | ExcalidrawFrameLikeElement
@@ -208,6 +209,7 @@ export type ExcalidrawElement =
   | ExcalidrawGenericElement
   | ExcalidrawTextElement
   | ExcalidrawTextLargeElement
+  | ExcalidrawTextNativeElement
   | ExcalidrawLinearElement
   | ExcalidrawArrowElement
   | ExcalidrawFreeDrawElement
@@ -276,6 +278,20 @@ export type ExcalidrawTextLargeElement = _ExcalidrawElementBase &
     renderVersion: number;
     lastEditedParagraphIndex: number;
     lastEditedAt: number;
+  }>;
+
+export type ExcalidrawTextNativeElement = _ExcalidrawElementBase &
+  Readonly<{
+    type: "text-native";
+    fontSize: number;
+    fontFamily: FontFamilyValues;
+    text: string;
+    textAlign: TextAlign;
+    verticalAlign: VerticalAlign;
+    containerId: ExcalidrawGenericElement["id"] | null;
+    originalText: string;
+    autoResize: boolean;
+    lineHeight: number & { _brand: "unitlessLineHeight" };
   }>;
 
 export type ExcalidrawBindableElement =

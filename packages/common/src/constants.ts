@@ -473,6 +473,7 @@ export const TOOL_TYPE = {
   freedraw: "freedraw",
   text: "text",
   "text-large": "text-large",
+  "text-native": "text-native",
   image: "image",
   eraser: "eraser",
   hand: "hand",

@@ -443,6 +443,7 @@ export const intersectElementWithLineSegment = (
     case "image":
     case "text":
     case "text-large":
+    case "text-native":
     case "iframe":
     case "embeddable":
     case "frame":

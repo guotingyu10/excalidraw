@@ -10,6 +10,7 @@ import type {
   ExcalidrawElement,
   ExcalidrawTextElement,
   ExcalidrawTextLargeElement,
+  ExcalidrawTextNativeElement,
   ExcalidrawEmbeddableElement,
   ExcalidrawLinearElement,
   ExcalidrawBindableElement,
@@ -68,6 +69,12 @@ export const isTextElement = (
   element: ExcalidrawElement | null,
 ): element is ExcalidrawTextElement => {
   return element != null && element.type === "text";
+};
+
+export const isTextNativeElement = (
+  element: ExcalidrawElement | null,
+): element is ExcalidrawTextNativeElement => {
+  return element != null && element.type === "text-native";
 };
 
 export const isTextLargeElement = (
@@ -259,6 +266,7 @@ export const isExcalidrawElement = (
   switch (type) {
     case "text":
     case "text-large":
+    case "text-native":
     case "diamond":
     case "rectangle":
     case "iframe":

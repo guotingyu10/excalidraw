@@ -32,6 +32,7 @@ import type {
   ExcalidrawImageElement,
   ExcalidrawTextElement,
   ExcalidrawTextLargeElement,
+  ExcalidrawTextNativeElement,
   ExcalidrawLinearElement,
   ExcalidrawGenericElement,
   NonDeleted,
@@ -290,6 +291,60 @@ export const newTextElement = (
   );
 
   return textElement;
+};
+
+export const newTextNativeElement = (
+  opts: {
+    text: string;
+    originalText?: string;
+    fontSize?: number;
+    fontFamily?: FontFamilyValues;
+    textAlign?: TextAlign;
+    verticalAlign?: VerticalAlign;
+    containerId?: ExcalidrawTextContainer["id"] | null;
+    lineHeight?: ExcalidrawTextNativeElement["lineHeight"];
+    autoResize?: ExcalidrawTextNativeElement["autoResize"];
+  } & ElementConstructorOpts,
+): NonDeleted<ExcalidrawTextNativeElement> => {
+  const fontFamily = opts.fontFamily || DEFAULT_FONT_FAMILY;
+  const fontSize = opts.fontSize || DEFAULT_FONT_SIZE;
+  const lineHeight = opts.lineHeight || getLineHeight(fontFamily);
+  const text = normalizeText(opts.text);
+  const metrics = measureText(
+    text,
+    getFontString({ fontFamily, fontSize }),
+    lineHeight,
+  );
+  const textAlign = opts.textAlign || DEFAULT_TEXT_ALIGN;
+  const verticalAlign = opts.verticalAlign || DEFAULT_VERTICAL_ALIGN;
+  const offsets = getTextElementPositionOffsets(
+    { textAlign, verticalAlign },
+    metrics,
+  );
+
+  const textNativeElementProps: ExcalidrawTextNativeElement = {
+    ..._newElementBase<ExcalidrawTextNativeElement>("text-native", opts),
+    text,
+    fontSize,
+    fontFamily,
+    textAlign,
+    verticalAlign,
+    x: opts.x - offsets.x,
+    y: opts.y - offsets.y,
+    width: metrics.width,
+    height: metrics.height,
+    containerId: opts.containerId || null,
+    originalText: opts.originalText ?? text,
+    autoResize: opts.autoResize ?? true,
+    lineHeight,
+  };
+
+  const textNativeElement: ExcalidrawTextNativeElement = newElementWith(
+    textNativeElementProps,
+    {},
+  );
+
+  return textNativeElement;
 };
 
 const getAdjustedDimensions = (

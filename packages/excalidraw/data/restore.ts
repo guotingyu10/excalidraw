@@ -103,6 +103,7 @@ export const AllowedExcalidrawActiveTools: Record<
   lasso: true,
   text: true,
   "text-large": true,
+  "text-native": true,
   rectangle: true,
   diamond: true,
   ellipse: true,
@@ -420,6 +421,18 @@ export const restoreElement = (
         renderVersion: element.renderVersion || 0,
         lastEditedParagraphIndex: element.lastEditedParagraphIndex || 0,
         lastEditedAt: element.lastEditedAt || Date.now(),
+      });
+    case "text-native":
+      return restoreElementWithProperties(element, {
+        fontSize: element.fontSize,
+        fontFamily: element.fontFamily,
+        text: element.text || "",
+        textAlign: element.textAlign || DEFAULT_TEXT_ALIGN,
+        verticalAlign: element.verticalAlign || "top",
+        containerId: element.containerId ?? null,
+        originalText: element.originalText || "",
+        autoResize: element.autoResize ?? true,
+        lineHeight: element.lineHeight || getLineHeight(element.fontFamily),
       });
     case "freedraw": {
       return restoreElementWithProperties(element, {

@@ -861,6 +861,7 @@ const _generateElementShape = (
     case "magicframe":
     case "text":
     case "text-large":
+    case "text-native":
     case "image": {
       const shape: ElementShapes[typeof element.type] = null;
       // we return (and cache) `null` to make sure we don't regenerate
@@ -961,6 +962,7 @@ export const getElementShape = <Point extends GlobalPoint | LocalPoint>(
     case "text":
     case "selection":
       return getPolygonShape(element);
+    case "text-native":
     case "text-large":
       return getPolygonShape(
         element as Parameters<typeof getPolygonShape>[0],

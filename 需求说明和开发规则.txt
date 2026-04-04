@@ -1053,13 +1053,10 @@ npx playwright test e2e/text-box-manual.ts --ui --config=playwright.config.temp.
 npx playwright test e2e/text-box.sp
 npx playwright test e2e/text-box-manual.spec.ts --ui --config=playwright.config.temp.ts
 ec.ts --ui --config=playwright.config.temp.ts
-
 e2e
 yarn test:e2e --workers=1 --grep "Text box line numbers left and right render once"
 yarn test:e2e --workers=2 --grep "^Double click the text box to insert the cursor"
-
 yarn test:e2e --workers=14
-
 yarn test:e2e e2e/text-wrap-consistency.spec.ts --grep "clicking in editor should insert"
 yarn test:e2e e2e/text-wrap-consistency.spec.ts --grep "clicking in editor should insert"
 yarn test:e2e --project=chromium --grep "text box style"

@@ -523,7 +523,8 @@ const getCanvasPadding = (element: ExcalidrawElement) => {
     case "freedraw":
       return element.strokeWidth * 12;
     case "text":
-    case "text-large": {
+    case "text-large":
+    case "text-native": {
       return element.fontSize / 2;
     }
     case "arrow":

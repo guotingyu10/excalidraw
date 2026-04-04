@@ -150,6 +150,7 @@ export type ToolType =
   | "freedraw"
   | "text"
   | "text-large"
+  | "text-native"
   | "image"
   | "eraser"
   | "hand"

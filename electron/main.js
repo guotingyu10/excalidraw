@@ -6,6 +6,17 @@ let mainWindow;
 
 const isDev = !app.isPackaged;
 
+// 性能优化: 提升 Electron windows 桌面端性能
+// 设置最大内存为 16GB (16384 MB)
+app.commandLine.appendSwitch('js-flags', '--max-old-space-size=16384');
+
+// 其他性能优化选项
+app.commandLine.appendSwitch('disable-renderer-backgrounding');
+app.commandLine.appendSwitch('disable-background-timer-throttling');
+// app.commandLine.appendSwitch('enable-gpu-rasterization');
+app.commandLine.appendSwitch('enable-zero-copy');
+app.commandLine.appendSwitch('disable-gpu-vsync'); // 禁用 VSync 提升帧率
+
 // 会话存储路径
 const getSessionFilePath = () => {
   const userDataPath = app.getPath('userData');
@@ -57,6 +68,7 @@ function createWindow() {
       disableBlinkFeatures: 'CacheStorage',
       hardwareAcceleration: true,
       experimentalFeatures: true,
+      backgroundThrottling: false, // 禁用后台节流，提升性能
       preload: path.join(__dirname, 'preload.js'),
     },
     show: false,

@@ -135,6 +135,7 @@ import {
   newLinearElement,
   newTextElement,
   newTextLargeElement,
+  newTextNativeElement,
   refreshTextDimensions,
   deepCopyElement,
   duplicateElements,
@@ -159,6 +160,7 @@ import {
   isBindableElement,
   isTextElement,
   isTextLargeElement,
+  isTextNativeElement,
   getNormalizedDimensions,
   isElementCompletelyInViewport,
   isElementInViewport,
@@ -274,6 +276,7 @@ import type {
   ExcalidrawLinearElement,
   ExcalidrawTextElement,
   ExcalidrawTextLargeElement,
+  ExcalidrawTextNativeElement,
   NonDeleted,
   InitializedExcalidrawImageElement,
   ExcalidrawImageElement,
@@ -338,6 +341,7 @@ import {
   actionSummaryToolCommentsOff,
   actionSummaryToolCommentsSingle,
   actionSummaryToolCommentsAll,
+  actionSetEmbeddableAsActiveTool,
 } from "../actions";
 import { actionWrapTextInContainer } from "../actions/actionBoundText";
 import { actionToggleHandTool, zoomToFit } from "../actions/actionCanvas";
@@ -1498,10 +1502,11 @@ class App extends React.Component<AppProps, AppState> {
       (this.state.activeEmbeddable?.element !== el ||
         this.state.activeEmbeddable?.state === "hover" ||
         !this.state.activeEmbeddable) &&
-      sceneX >= el.x + el.width / 3 &&
-      sceneX <= el.x + (2 * el.width) / 3 &&
-      sceneY >= el.y + el.height / 3 &&
-      sceneY <= el.y + (2 * el.height) / 3
+      // 点击整个嵌入元素区域都能激活，而不仅仅是中间 1/3
+      sceneX >= el.x &&
+      sceneX <= el.x + el.width &&
+      sceneY >= el.y &&
+      sceneY <= el.y + el.height
     );
   }
 
@@ -1822,9 +1827,7 @@ class App extends React.Component<AppProps, AppState> {
                       title="Excalidraw Embedded Content"
                       allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                       allowFullScreen={true}
-                      sandbox={`${
-                        src?.sandbox?.allowSameOrigin ? "allow-same-origin" : ""
-                      } allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-presentation allow-downloads`}
+                      sandbox={`allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-presentation allow-downloads`}
                     />
                   )}
                 </div>
@@ -6787,6 +6790,72 @@ class App extends React.Component<AppProps, AppState> {
     });
   };
 
+  private async handleTextNativeWysiwyg(
+    element: ExcalidrawTextNativeElement,
+    { isExistingElement = false }: { isExistingElement?: boolean },
+  ) {
+    const { textNativeWysiwyg } = await import("../wysiwyg/textNativeWysiwyg");
+
+    const updateElement = (nextText: string, isDeleted: boolean) => {
+      this.scene.replaceAllElements([
+        ...this.scene.getElementsIncludingDeleted().map((_element) => {
+          if (_element.id === element.id && isTextNativeElement(_element)) {
+            return newElementWith(_element, {
+              originalText: nextText,
+              text: nextText,
+            });
+          }
+          return _element;
+        }),
+      ]);
+    };
+
+    const getViewportCoords = (x: number, y: number): [number, number] => {
+      const { x: viewportX, y: viewportY } = sceneCoordsToViewportCoords(
+        { sceneX: x, sceneY: y },
+        this.state,
+      );
+      return [
+        viewportX - this.state.offsetLeft,
+        viewportY - this.state.offsetTop,
+      ] as [number, number];
+    };
+
+    const submitFn = textNativeWysiwyg({
+      id: element.id,
+      element,
+      onChange: withBatchedUpdates((nextText) => {
+        updateElement(nextText, false);
+      }),
+      onSubmit: withBatchedUpdates(({ viaKeyboard, nextOriginalText }) => {
+        const isDeleted = !nextOriginalText.trim();
+        updateElement(nextOriginalText, isDeleted);
+
+        this.setState((prevState) => ({
+          selectedElementIds: makeNextSelectedElementIds(
+            { [element.id]: !isDeleted as true },
+            prevState,
+          ),
+          editingTextElement: null,
+        }));
+
+        if (!this.state.activeTool.locked) {
+          this.setState({
+            activeTool: updateActiveTool(this.state, {
+              type: this.state.preferredSelectionTool.type,
+            }),
+          });
+        }
+
+        this.focusContainer();
+      }),
+      getViewportCoords,
+      canvas: this.canvas,
+      excalidrawContainer: this.excalidrawContainerRef.current,
+      app: this,
+    });
+  };
+
   private focusTextEditorAtLine = (lineNumber: number) => {
     const editor = document.querySelector(
       ".excalidraw-wysiwyg",
@@ -8997,6 +9066,8 @@ class App extends React.Component<AppProps, AppState> {
       this.handleTextOnPointerDown(event, pointerDownState);
     } else if (this.state.activeTool.type === "text-large") {
       this.handleTextLargeOnPointerDown(event, pointerDownState);
+    } else if (this.state.activeTool.type === "text-native") {
+      this.handleTextNativeOnPointerDown(event, pointerDownState);
     } else if (
       this.state.activeTool.type === "arrow" ||
       this.state.activeTool.type === "line"
@@ -10101,6 +10172,71 @@ class App extends React.Component<AppProps, AppState> {
       });
 
       this.handleTextLargeWysiwyg(textLargeElement, {
+        isExistingElement: false,
+      });
+    }
+
+    resetCursor(this.interactiveCanvas);
+    if (!this.state.activeTool.locked) {
+      this.setState({
+        activeTool: updateActiveTool(this.state, {
+          type: this.state.preferredSelectionTool.type,
+        }),
+      });
+    }
+  };
+
+  private handleTextNativeOnPointerDown = (
+    event: React.PointerEvent<HTMLElement>,
+    pointerDownState: PointerDownState,
+  ): void => {
+    if (this.state.editingTextElement) {
+      return;
+    }
+
+    const sceneX = pointerDownState.origin.x;
+    const sceneY = pointerDownState.origin.y;
+
+    const existingElement = this.getElementAtPosition(sceneX, sceneY, {
+      includeBoundTextElement: true,
+    });
+
+    if (existingElement && isTextNativeElement(existingElement)) {
+      this.setState({
+        selectedElementIds: makeNextSelectedElementIds(
+          { [existingElement.id]: true },
+          this.state,
+        ),
+        selectedGroupIds: {},
+        editingTextElement: existingElement,
+      });
+
+      this.handleTextNativeWysiwyg(existingElement, {
+        isExistingElement: true,
+      });
+    } else {
+      const textNativeElement = newTextNativeElement({
+        text: "",
+        x: sceneX,
+        y: sceneY,
+        width: 200,
+        height: 50,
+        strokeColor: this.state.currentItemStrokeColor,
+        backgroundColor: "transparent",
+      });
+
+      this.scene.insertElements([textNativeElement]);
+
+      this.setState({
+        selectedElementIds: makeNextSelectedElementIds(
+          { [textNativeElement.id]: true },
+          this.state,
+        ),
+        selectedGroupIds: {},
+        editingTextElement: textNativeElement,
+      });
+
+      this.handleTextNativeWysiwyg(textNativeElement, {
         isExistingElement: false,
       });
     }
@@ -13871,14 +14007,14 @@ class App extends React.Component<AppProps, AppState> {
     );
     let type: "element" | "canvas" = isElementSelected ? "element" : "canvas";
 
-    if (type === "canvas" && element) {
-      this.setState({
-        selectedElementIds: { [element.id]: true },
-        selectedGroupIds: {},
-      });
-      isElementSelected = true;
-      type = "element";
-    }
+    // if (type === "canvas" && element) {
+    //   this.setState({
+    //     selectedElementIds: { [element.id]: true },
+    //     selectedGroupIds: {},
+    //   });
+    //   isElementSelected = true;
+    //   type = "element";
+    // }
 
     if (type === "canvas" && event.button === POINTER_BUTTON.SECONDARY) {
       return;
@@ -14268,6 +14404,8 @@ class App extends React.Component<AppProps, AppState> {
       return [
         actionPaste,
         CONTEXT_MENU_SEPARATOR,
+        actionSetEmbeddableAsActiveTool,
+        CONTEXT_MENU_SEPARATOR,
         actionCopyAsPng,
         actionCopyAsSvg,
         copyText,
@@ -14328,6 +14466,8 @@ class App extends React.Component<AppProps, AppState> {
         : [];
 
     return [
+      CONTEXT_MENU_SEPARATOR,
+      actionSetEmbeddableAsActiveTool,
       CONTEXT_MENU_SEPARATOR,
       actionCut,
       actionCopy,

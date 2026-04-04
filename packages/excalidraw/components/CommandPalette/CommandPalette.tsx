@@ -582,6 +582,16 @@ function CommandPaletteInner({
 
           return acc;
         }, []),
+        {
+          label: "Text (Native)",
+          category: DEFAULT_CATEGORIES.tools,
+          icon: boltIcon,
+          keywords: ["toolbar", "text", "textarea", "native"],
+          viewMode: false,
+          perform: ({ event }) => {
+            app.setActiveTool({ type: "text-native" });
+          },
+        },
         ...toolCommands,
         {
           label: t("toolBar.lock"),
