@@ -262,7 +262,11 @@ export class Fonts {
           try {
             // WARN: browser prioritizes loading only font faces with unicode ranges for characters which are present in the document (html & canvas), other font faces could stay unloaded
             // we might want to retry here, i.e.  in case CDN is down, but so far I didn't experience any issues - maybe it handles retry-like logic under the hood
-            const fontFaces = await window.document.fonts.load(font, text);
+            // 修复 Electron 中 dialog 之后 document.fonts.load 可能永远不 resolve 的 Bug
+            const fontFaces = await Promise.race([
+              window.document.fonts.load(font, text),
+              new Promise<FontFace[]>((resolve) => setTimeout(() => resolve([]), 500))
+            ]);
 
             return [index, fontFaces];
           } catch (e) {

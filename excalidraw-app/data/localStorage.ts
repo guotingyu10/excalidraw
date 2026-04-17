@@ -22,7 +22,7 @@ export const getDefaultFontFamilyFromLocalStorage =
       );
       if (stored) {
         const parsed = parseInt(stored, 10);
-        if (!isNaN(parsed) && parsed in FONT_FAMILY) {
+        if (!isNaN(parsed) && Object.values(FONT_FAMILY).includes(parsed as any)) {
           return parsed as FontFamilyValues;
         }
       }

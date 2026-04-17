@@ -65,7 +65,6 @@ function createWindow() {
       contextIsolation: true,
       enableRemoteModule: false,
       webSecurity: false,
-      disableBlinkFeatures: 'CacheStorage',
       hardwareAcceleration: true,
       experimentalFeatures: true,
       backgroundThrottling: false, // 禁用后台节流，提升性能

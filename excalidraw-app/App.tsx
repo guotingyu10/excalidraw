@@ -426,6 +426,20 @@ const ExcalidrawWrapper = () => {
 
   useEffect(() => {
     (window as any).excalidrawAPI = excalidrawAPI;
+
+    // Preload default font family so new text elements render correctly
+    const defaultFontFamily = getDefaultFontFamilyFromLocalStorage();
+    if (defaultFontFamily !== null) {
+      import("@excalidraw/excalidraw/fonts").then(({ Fonts }) => {
+        Fonts.loadElementsFonts([
+          {
+            type: "text",
+            fontFamily: defaultFontFamily,
+            originalText: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
+          } as any,
+        ]);
+      });
+    }
   }, [excalidrawAPI]);
 
   const { editorTheme, appTheme, setAppTheme } = useHandleAppTheme();
@@ -1316,6 +1330,19 @@ const ExcalidrawWrapper = () => {
                   // Handle dropdown change
                   dropdown.addEventListener("change", () => {
                     const selectedFontFamily = parseInt(dropdown.value, 10);
+
+                    // Preload the selected font to ensure it renders correctly on canvas
+                    if (excalidrawAPI) {
+                      import("@excalidraw/excalidraw/fonts").then(({ Fonts }) => {
+                        Fonts.loadElementsFonts([
+                          {
+                            type: "text",
+                            fontFamily: selectedFontFamily,
+                            originalText: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
+                          } as any,
+                        ]);
+                      });
+                    }
 
                     // Save to localStorage
                     try {
