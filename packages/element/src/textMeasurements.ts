@@ -227,7 +227,12 @@ class CanvasTextMetricsProvider implements TextMetricsProvider {
 }
 
 export const getLineWidth = (text: string, font: FontString) => {
-  return getTextMetricsProvider().getLineWidth(text, font);
+  // 使用强制字符宽度计算整行宽度
+  let totalWidth = 0;
+  for (const char of text) {
+    totalWidth += charWidth.calculate(char, font);
+  }
+  return totalWidth;
 };
 
 export const getTextWidth = (text: string, font: FontString) => {
@@ -258,7 +263,19 @@ export const charWidth = (() => {
       cachedCharWidth[font] = [];
     }
     if (!cachedCharWidth[font][unicode]) {
-      const width = getLineWidth(char, font);
+      // 检查是否为英文字母
+      const isEnglishChar = /^[a-zA-Z]$/.test(char);
+      
+      // 基于字体大小计算单位宽度
+      // 提取字体大小（假设font字符串格式为 "fontSize fontFamily"）
+      const fontSizeMatch = font.match(/^([0-9.]+)px/);
+      const fontSize = fontSizeMatch ? parseFloat(fontSizeMatch[1]) : 16;
+      
+      // 英文字符宽度为1单位，其他字符为2单位
+      // 单位宽度设为字体大小的1/2，可根据需要调整
+      const unitWidth = fontSize / 2;
+      const width = isEnglishChar ? unitWidth : unitWidth * 2;
+      
       cachedCharWidth[font][unicode] = width;
     }
 
