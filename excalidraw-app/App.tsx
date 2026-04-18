@@ -231,9 +231,11 @@ const initializeScene = async (opts: {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let scene: any = null;
-  let localDataState: { elements: any; appState: any } | null = null;
+  let localDataState: { elements: any; appState: any } | null = null; // 修复类型声明 - 2026.04.17
 
-  // 优先级1: Electron 环境 - 从会话恢复上次打开的文件
+  // 禁用启动时自动打开上次打开的文件 - 2026.04.17
+  // 根据用户需求：不打开 .excalidraw 文件就不加载任何内容
+  /*
   if (typeof window !== "undefined" && window.electronAPI) {
     try {
       const sessionResult = await window.electronAPI.getSession();
@@ -254,11 +256,23 @@ const initializeScene = async (opts: {
               path: filePath,
             } as unknown as FileSystemFileHandle;
             
+            // 修复：获取文件大小并设置到 appState 中 - 2026.04.17
+            let fileSize = null;
+            try {
+              const sizeResult = await window.electronAPI.getFileSize(filePath);
+              if (sizeResult.success && sizeResult.size !== undefined) {
+                fileSize = sizeResult.size;
+              }
+            } catch (e) {
+              console.error("[Electron] Failed to get file size:", e);
+            }
+            
             scene = {
               elements: loadedData.elements,
               appState: {
                 ...loadedData.appState,
                 fileHandle: mockFileHandle,
+                fileSize: fileSize, // 新增：设置文件大小
               },
               files: loadedData.files,
             };
@@ -272,18 +286,27 @@ const initializeScene = async (opts: {
       console.error("[Electron] Failed to get session:", e);
     }
   }
+  */
 
-  // 优先级2: 从 localStorage 恢复（如果 Electron 会话恢复失败）
+  // 禁用从 localStorage 恢复 - 2026.04.17
+  // 只从 .excalidraw 文件打开，不使用 localStorage 作为后备方案
   if (!scene) {
-    localDataState = importFromLocalStorage();
-    scene = localDataState || {
+    // 原代码已注释，不再从 localStorage 恢复
+    // localDataState = importFromLocalStorage();
+    // scene = localDataState || {
+    //   elements: [],
+    //   appState: null,
+    // };
+    // 新实现：直接返回空场景，只从 .excalidraw 文件打开
+    scene = {
       elements: [],
       appState: null,
     };
-  } else {
-    // Electron 会话恢复成功，但仍需读取 localStorage 用于合并主题等设置
-    localDataState = importFromLocalStorage();
   }
+  // else {
+  //   // Electron 会话恢复成功，但仍需读取 localStorage 用于合并主题等设置
+  //   localDataState = importFromLocalStorage();
+  // }
 
   let roomLinkData = getCollaborationLinkData(window.location.href);
   const isExternalScene = !!(id || jsonBackendMatch || roomLinkData);
@@ -308,13 +331,11 @@ const initializeScene = async (opts: {
               repairBindings: true,
               deleteInvisibleElements: true,
             }),
-            localDataState?.elements,
+            null, // 禁用 localStorage - 2026.04.17，不再使用 localDataState?.elements
           ),
           appState: restoreAppState(
             imported.appState,
-            // local appState when importing from backend to ensure we restore
-            // localStorage user settings which we do not persist on server.
-            localDataState?.appState,
+            null, // 禁用 localStorage - 2026.04.17，不再使用 localDataState?.appState
           ),
         };
       }
@@ -379,7 +400,7 @@ const initializeScene = async (opts: {
           ...restoreAppState(
             {
               ...scene?.appState,
-              theme: localDataState?.appState?.theme || scene?.appState?.theme,
+              theme: scene?.appState?.theme, // 禁用 localStorage - 2026.04.17，不再使用 localDataState
             },
             excalidrawAPI.getAppState(),
           ),
@@ -438,6 +459,102 @@ const ExcalidrawWrapper = () => {
             originalText: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
           } as any,
         ]);
+      });
+    }
+
+    // 添加 Electron 事件监听器 - 简化版本，修复 TypeScript 错误 - 2026.04.17
+    if (typeof window !== "undefined" && window.electronAPI) {
+      const electronAPI = window.electronAPI as any;
+
+      // 新建文件
+      electronAPI.onNewDrawing(() => {
+        if (excalidrawAPI) {
+          excalidrawAPI.resetScene();
+        }
+      });
+
+      // 打开文件（从菜单）- 修复加载逻辑 - 2026.04.17
+      electronAPI.onOpenDrawing(async (event: any, data: any) => {
+        const payload = data || event;
+        const filePath = payload?.filePath;
+        const content = payload?.content;
+        
+        if (excalidrawAPI && filePath && content) {
+          try {
+            const blob = new Blob([content], { type: "application/json" });
+            const { loadFromBlob } = await import("@excalidraw/excalidraw/data/blob");
+            const loadedData = await loadFromBlob(blob, null, null);
+            
+            const fileName = filePath.split(/[/\\]/).pop() || "untitled.excalidraw";
+            const mockFileHandle = {
+              name: fileName,
+              path: filePath,
+            } as unknown as FileSystemFileHandle;
+            
+            let fileSize = null;
+            try {
+              const sizeResult = await window.electronAPI!.getFileSize(filePath);
+              if (sizeResult.success && sizeResult.size !== undefined) {
+                fileSize = sizeResult.size;
+              }
+            } catch (e) {}
+
+            excalidrawAPI.updateScene({
+              elements: loadedData.elements,
+              appState: {
+                ...loadedData.appState,
+                fileHandle: mockFileHandle,
+                fileSize: fileSize,
+              },
+            });
+            if (loadedData.files) {
+              excalidrawAPI.addFiles(Object.values(loadedData.files));
+            }
+
+            await window.electronAPI!.saveSession({
+              lastOpenedFiles: [filePath],
+              lastActiveFile: filePath,
+            });
+            console.log("[Electron] Loaded file from menu:", fileName);
+          } catch (e) {
+            console.error("[Electron] Failed to load file from menu:", e);
+          }
+        }
+      });
+
+      // 保存和另存为事件处理 - 2026.04.17
+      electronAPI.onSaveDrawing(() => {
+        if (excalidrawAPI) {
+          const e = new KeyboardEvent('keydown', { key: 's', ctrlKey: true, metaKey: true, bubbles: true });
+          document.dispatchEvent(e);
+        }
+      });
+
+      electronAPI.onSaveDrawingAs(() => {
+        if (excalidrawAPI) {
+          const e = new KeyboardEvent('keydown', { key: 's', ctrlKey: true, metaKey: true, shiftKey: true, bubbles: true });
+          document.dispatchEvent(e);
+        }
+      });
+
+      electronAPI.onExportImage(() => {
+        // 可以实现导出逻辑
+      });
+
+      electronAPI.onZoomIn(() => {
+        // 可以实现缩放逻辑
+      });
+
+      electronAPI.onZoomOut(() => {
+        // 可以实现缩放逻辑
+      });
+
+      electronAPI.onZoomReset(() => {
+        // 可以实现缩放逻辑
+      });
+
+      electronAPI.onShowAbout(() => {
+        // 可以实现关于对话框
       });
     }
   }, [excalidrawAPI]);

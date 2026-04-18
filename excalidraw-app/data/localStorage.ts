@@ -58,62 +58,68 @@ export const importUsernameFromLocalStorage = (): string | null => {
   return null;
 };
 
+// 禁用从 localStorage 读取初始数据 - 2026.04.17
+// 只从 .excalidraw 文件打开，不使用 localStorage 恢复数据
 export const importFromLocalStorage = () => {
-  let savedElements = null;
-  let savedState = null;
+  // 原代码已注释，不再从 localStorage 读取数据
+  // let savedElements = null;
+  // let savedState = null;
+  //
+  // try {
+  //   // Electron 环境：优先从 lastFileContent 恢复
+  //   if (typeof window !== "undefined" && window.electronAPI) {
+  //     const lastFileContent = localStorage.getItem("excalidraw.lastFileContent");
+  //     if (lastFileContent) {
+  //       try {
+  //         const parsed = JSON.parse(lastFileContent);
+  //         if (parsed && parsed.elements) {
+  //           // console.log("[Electron] Restoring from lastFileContent");
+  //           return {
+  //             elements: parsed.elements || [],
+  //             appState: parsed.appState || null,
+  //           };
+  //         }
+  //       } catch (e) {
+  //         console.error("[Electron] Failed to parse lastFileContent:", e);
+  //       }
+  //     }
+  //   }
+  //
+  //   savedElements = localStorage.getItem(STORAGE_KEYS.LOCAL_STORAGE_ELEMENTS);
+  //   savedState = localStorage.getItem(STORAGE_KEYS.LOCAL_STORAGE_APP_STATE);
+  // } catch (error: any) {
+  //   // Unable to access localStorage
+  //   console.error(error);
+  // }
+  //
+  // let elements: ExcalidrawElement[] = [];
+  // if (savedElements) {
+  //   try {
+  //     elements = JSON.parse(savedElements);
+  //   } catch (error: any) {
+  //     console.error(error);
+  //     // Do nothing because elements array is already empty
+  //   }
+  // }
+  //
+  // let appState = null;
+  // if (savedState) {
+  //   try {
+  //     appState = {
+  //       ...getDefaultAppState(),
+  //       ...clearAppStateForLocalStorage(
+  //         JSON.parse(savedState) as Partial<AppState>,
+  //       ),
+  //     };
+  //   } catch (error: any) {
+  //     console.error(error);
+  //     // Do nothing because appState is already null
+  //   }
+  // }
+  // return { elements, appState };
 
-  try {
-    // Electron 环境：优先从 lastFileContent 恢复
-    if (typeof window !== "undefined" && window.electronAPI) {
-      const lastFileContent = localStorage.getItem("excalidraw.lastFileContent");
-      if (lastFileContent) {
-        try {
-          const parsed = JSON.parse(lastFileContent);
-          if (parsed && parsed.elements) {
-            // console.log("[Electron] Restoring from lastFileContent");
-            return {
-              elements: parsed.elements || [],
-              appState: parsed.appState || null,
-            };
-          }
-        } catch (e) {
-          console.error("[Electron] Failed to parse lastFileContent:", e);
-        }
-      }
-    }
-
-    savedElements = localStorage.getItem(STORAGE_KEYS.LOCAL_STORAGE_ELEMENTS);
-    savedState = localStorage.getItem(STORAGE_KEYS.LOCAL_STORAGE_APP_STATE);
-  } catch (error: any) {
-    // Unable to access localStorage
-    console.error(error);
-  }
-
-  let elements: ExcalidrawElement[] = [];
-  if (savedElements) {
-    try {
-      elements = JSON.parse(savedElements);
-    } catch (error: any) {
-      console.error(error);
-      // Do nothing because elements array is already empty
-    }
-  }
-
-  let appState = null;
-  if (savedState) {
-    try {
-      appState = {
-        ...getDefaultAppState(),
-        ...clearAppStateForLocalStorage(
-          JSON.parse(savedState) as Partial<AppState>,
-        ),
-      };
-    } catch (error: any) {
-      console.error(error);
-      // Do nothing because appState is already null
-    }
-  }
-  return { elements, appState };
+  // 新实现：始终返回空数据，只从 .excalidraw 文件打开
+  return { elements: [], appState: null };
 };
 
 export const getElementsStorageSize = () => {

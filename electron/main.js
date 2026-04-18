@@ -6,6 +6,20 @@ let mainWindow;
 
 const isDev = !app.isPackaged;
 
+// 注册 app 协议为特权协议，允许其访问 localStorage、cookie 等标准 Web API
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: 'app',
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      corsEnabled: true,
+      bypassCSP: true,
+    },
+  },
+]);
+
 // 性能优化: 提升 Electron windows 桌面端性能
 // 设置最大内存为 16GB (16384 MB)
 app.commandLine.appendSwitch('js-flags', '--max-old-space-size=16384');
@@ -306,7 +320,11 @@ ipcMain.handle('get-session-path', async () => {
 
 app.whenReady().then(() => {
   protocol.registerFileProtocol('app', (request, callback) => {
-    const url = request.url.replace('app://', '');
+    let url = request.url.replace('app://', '');
+    // 移除可能存在的协议末尾的多余斜杠或绝对路径开头的斜杠
+    if (url.startsWith('/')) {
+      url = url.substring(1);
+    }
     const filePath = path.join(__dirname, url);
     callback(filePath);
   });

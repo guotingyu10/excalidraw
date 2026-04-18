@@ -70,42 +70,48 @@ class LocalFileManager extends FileManager {
   };
 }
 
+// 禁用保存到 localStorage - 2026.04.17
+// 只保存到 .excalidraw 文件，不使用 localStorage 持久化数据
 const saveDataStateToLocalStorage = (
   elements: readonly ExcalidrawElement[],
   appState: AppState,
 ) => {
-  const localStorageQuotaExceeded = appJotaiStore.get(
-    localStorageQuotaExceededAtom,
-  );
-  try {
-    const _appState = clearAppStateForLocalStorage(appState);
+  // 原代码已注释，不再保存到 localStorage
+  // const localStorageQuotaExceeded = appJotaiStore.get(
+  //   localStorageQuotaExceededAtom,
+  // );
+  // try {
+  //   const _appState = clearAppStateForLocalStorage(appState);
+  //
+  //   if (
+  //     _appState.openSidebar?.name === DEFAULT_SIDEBAR.name &&
+  //     _appState.openSidebar.tab === CANVAS_SEARCH_TAB
+  //   ) {
+  //     _appState.openSidebar = null;
+  //   }
+  //
+  //   localStorage.setItem(
+  //     STORAGE_KEYS.LOCAL_STORAGE_ELEMENTS,
+  //     JSON.stringify(getNonDeletedElements(elements)),
+  //   );
+  //   localStorage.setItem(
+  //     STORAGE_KEYS.LOCAL_STORAGE_APP_STATE,
+  //     JSON.stringify(_appState),
+  //   );
+  //   updateBrowserStateVersion(STORAGE_KEYS.VERSION_DATA_STATE);
+  //   if (localStorageQuotaExceeded) {
+  //     appJotaiStore.set(localStorageQuotaExceededAtom, false);
+  //   }
+  // } catch (error: any) {
+  //   // Unable to access window.localStorage
+  //   console.error(error);
+  //   if (isQuotaExceededError(error) && !localStorageQuotaExceeded) {
+  //     appJotaiStore.set(localStorageQuotaExceededAtom, true);
+  //   }
+  // }
 
-    if (
-      _appState.openSidebar?.name === DEFAULT_SIDEBAR.name &&
-      _appState.openSidebar.tab === CANVAS_SEARCH_TAB
-    ) {
-      _appState.openSidebar = null;
-    }
-
-    localStorage.setItem(
-      STORAGE_KEYS.LOCAL_STORAGE_ELEMENTS,
-      JSON.stringify(getNonDeletedElements(elements)),
-    );
-    localStorage.setItem(
-      STORAGE_KEYS.LOCAL_STORAGE_APP_STATE,
-      JSON.stringify(_appState),
-    );
-    updateBrowserStateVersion(STORAGE_KEYS.VERSION_DATA_STATE);
-    if (localStorageQuotaExceeded) {
-      appJotaiStore.set(localStorageQuotaExceededAtom, false);
-    }
-  } catch (error: any) {
-    // Unable to access window.localStorage
-    console.error(error);
-    if (isQuotaExceededError(error) && !localStorageQuotaExceeded) {
-      appJotaiStore.set(localStorageQuotaExceededAtom, true);
-    }
-  }
+  // 新实现：不执行任何保存操作到 localStorage
+  // 数据只在用户显式保存到 .excalidraw 文件时才持久化
 };
 
 const isQuotaExceededError = (error: any) => {
@@ -122,8 +128,11 @@ export class LocalData {
       files: BinaryFiles,
       onFilesSaved: () => void,
     ) => {
-      saveDataStateToLocalStorage(elements, appState);
+      // 禁用保存到 localStorage - 2026.04.17
+      // 不再调用 saveDataStateToLocalStorage
+      // saveDataStateToLocalStorage(elements, appState);
 
+      // 仍然保存文件到 indexedDB（仅用于图片等二进制文件缓存，不保存画布内容）
       await this.fileStorage.saveFiles({
         elements,
         files,

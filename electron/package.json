@@ -25,7 +25,12 @@
     },
     "files": [
       "main.js",
-      "../excalidraw-app/build/**/*"
+      "preload.js",
+      {
+        "from": "../excalidraw-app/build",
+        "to": ".",
+        "filter": ["**/*"]
+      }
     ],
     "win": {
       "target": [

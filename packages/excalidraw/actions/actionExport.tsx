@@ -357,9 +357,10 @@ export const actionSaveToActiveFile = register({
           }
         }
         
+        // 禁用保存到 localStorage - 2026.04.17
         // 同时保存到 localStorage 作为备份
-        localStorage.setItem("excalidraw.lastFileName", filename);
-        localStorage.setItem("excalidraw.lastFileContent", json);
+        // localStorage.setItem("excalidraw.lastFileName", filename);
+        // localStorage.setItem("excalidraw.lastFileContent", json);
         // console.log("[DEBUG] Saved to localStorage:", filename);
       } else {
         const result = isImageFileHandle(previousFileHandle)
@@ -537,14 +538,15 @@ export const actionLoadScene = register({
         }
       }
 
-      try {
-        const json = serializeAsJSON(loadedElements, loadedAppState || {}, files || {}, "local");
-        localStorage.setItem("excalidraw.lastFileName", fileName);
-        localStorage.setItem("excalidraw.lastFileContent", json);
-        // console.log("[DEBUG] loadScene saved to localStorage:", fileName);
-      } catch (e) {
-        console.error("[DEBUG] Failed to save to localStorage:", e);
-      }
+      // 禁用保存到 localStorage - 2026.04.17
+      // try {
+      //   const json = serializeAsJSON(loadedElements, loadedAppState || {}, files || {}, "local");
+      //   localStorage.setItem("excalidraw.lastFileName", fileName);
+      //   localStorage.setItem("excalidraw.lastFileContent", json);
+      //   // console.log("[DEBUG] loadScene saved to localStorage:", fileName);
+      // } catch (e) {
+      //   console.error("[DEBUG] Failed to save to localStorage:", e);
+      // }
 
       return {
         elements: loadedElements,

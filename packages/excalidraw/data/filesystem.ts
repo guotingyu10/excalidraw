@@ -52,6 +52,16 @@ export const fileOpen = async <M extends boolean | undefined = false>(opts: {
         path: filePath,
       };
 
+      // Electron 环境：打开文件时保存会话状态
+      try {
+        await window.electronAPI.saveSession({
+          lastOpenedFiles: [filePath],
+          lastActiveFile: filePath,
+        });
+      } catch (e) {
+        console.error("[Electron] Failed to save session:", e);
+      }
+
       return file as RetType;
     } catch (error: any) {
       if (error.name === "AbortError") {

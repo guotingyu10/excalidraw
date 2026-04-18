@@ -3000,11 +3000,12 @@ class App extends React.Component<AppProps, AppState> {
       this.setState({ isLoading: true });
     }
 
-    const lastFile = await this.loadFileFromLocalStorage();
-    if (lastFile) {
-      await this.loadFileToCanvas(lastFile.file, null);
-      return;
-    }
+    // 禁用从 localStorage 恢复内部状态 - 2026.04.17
+    // const lastFile = await this.loadFileFromLocalStorage();
+    // if (lastFile) {
+    //   await this.loadFileToCanvas(lastFile.file, null);
+    //   return;
+    // }
 
     let initialData = null;
     try {
@@ -13886,7 +13887,8 @@ class App extends React.Component<AppProps, AppState> {
 
         console.log("[DEBUG] loadSceneOrLibraryFromBlob returned:", ret?.type);
         if (ret?.type === MIME_TYPES.excalidraw) {
-          this.saveFileToLocalStorage(file, ret.data);
+          // 禁用保存到 localStorage - 2026.04.17
+          // this.saveFileToLocalStorage(file, ret.data);
         }
       } catch (error: any) {
         const imageSceneDataError = error instanceof ImageSceneDataError;
