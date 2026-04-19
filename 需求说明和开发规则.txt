@@ -1047,6 +1047,12 @@ yarn electron:install
 start-electron-dev.bat
 yarn electron:dev
 yarn electron:build:win
+
+
+分析能否使用强制设置字符宽度解决换行差异的问题,将所有英文字符的宽度统一设为1单位,将所有其他字符的宽度统一设为2单位;(只有一行的字符宽度超过文本框宽度才换行,不使用浏览器自带的换行逻辑)
+
+
+
 测试:
 yarn test:all
 npx playwright test e2e/text-box-manual.ts --ui --config=playwright.config.temp.ts

@@ -22,14 +22,7 @@ export const measureText = (
     .join("\n");
 
   const provider = getTextMetricsProvider();
-  if (!isTestEnv() && provider instanceof DomTextMetricsProvider) {
-    return provider.measureText(_text, font, lineHeight);
-  }
-
-  const fontSize = parseFloat(font);
-  const height = getTextHeight(_text, fontSize, lineHeight);
-  const width = getTextWidth(_text, font);
-  return { width, height };
+  return provider.measureText(_text, font, lineHeight);
 };
 
 const DUMMY_TEXT = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789".toLocaleUpperCase();
@@ -122,61 +115,72 @@ export const setCustomTextMetricsProvider = (provider: TextMetricsProvider) => {
 
 const getTextMetricsProvider = () => {
   if (!textMetricsProvider) {
-    textMetricsProvider =
-      typeof document !== "undefined" && document.body && !isTestEnv()
-        ? new DomTextMetricsProvider()
-        : new CanvasTextMetricsProvider();
+    textMetricsProvider = new PretextTextMetricsProvider();
   }
   return textMetricsProvider;
 };
 
 export interface TextMetricsProvider {
   getLineWidth(text: string, fontString: FontString): number;
+  measureText(
+    text: string,
+    fontString: FontString,
+    lineHeight: ExcalidrawTextElement["lineHeight"],
+  ): { width: number; height: number };
 }
 
-class DomTextMetricsProvider implements TextMetricsProvider {
-  private container: HTMLDivElement | null = null;
-  private span: HTMLSpanElement | null = null;
+class PretextTextMetricsProvider implements TextMetricsProvider {
+  private canvas: HTMLCanvasElement | null;
+  private baseCharWidthCache = new Map<string, number>();
 
-  private ensureNodes() {
-    if (this.container && this.span) {
-      return;
+  constructor() {
+    if (typeof document !== "undefined") {
+      this.canvas = document.createElement("canvas");
+    } else {
+      this.canvas = null;
+    }
+  }
+
+  private getBaseCharWidth(fontString: FontString): number {
+    if (this.baseCharWidthCache.has(fontString)) {
+      return this.baseCharWidthCache.get(fontString)!;
     }
 
-    const container = document.createElement("div");
-    container.style.position = "fixed";
-    container.style.top = "-100000px";
-    container.style.left = "0";
-    container.style.visibility = "hidden";
-    container.style.pointerEvents = "none";
-    container.style.padding = "0";
-    container.style.margin = "0";
-    container.style.border = "0";
-    container.style.whiteSpace = "pre";
-    container.style.display = "block";
+    let width = 10;
+    if (this.canvas && this.canvas.getContext) {
+      const context = this.canvas.getContext("2d");
+      if (context) {
+        context.font = fontString;
+        const metrics = context.measureText("a");
+        width = metrics.width || parseFloat(fontString) * 0.5 || 10;
+      }
+    } else {
+      width = parseFloat(fontString) * 0.5 || 10;
+    }
 
-    const span = document.createElement("span");
-    span.style.display = "inline-block";
-    span.style.whiteSpace = "pre";
-    span.style.padding = "0";
-    span.style.margin = "0";
-    span.style.border = "0";
+    // Test environment fallback
+    if (isTestEnv()) {
+      width = 10;
+    }
 
-    container.appendChild(span);
-    document.body.appendChild(container);
-
-    this.container = container;
-    this.span = span;
+    this.baseCharWidthCache.set(fontString, width);
+    return width;
   }
 
   public getLineWidth(text: string, fontString: FontString): number {
-    this.ensureNodes();
-
-    const span = this.span!;
-    span.style.font = fontString;
-    span.style.lineHeight = "normal";
-    span.textContent = text;
-    return span.getBoundingClientRect().width;
+    const baseWidth = this.getBaseCharWidth(fontString);
+    let totalWidth = 0;
+    for (let i = 0; i < text.length; i++) {
+      const code = text.charCodeAt(i);
+      // ASCII printable characters: English letters, numbers, symbols (space to ~)
+      if (code >= 0x20 && code <= 0x7e) {
+        totalWidth += baseWidth;
+      } else {
+        // Other characters (Chinese, etc.) are 2x
+        totalWidth += baseWidth * 2;
+      }
+    }
+    return totalWidth;
   }
 
   public measureText(
@@ -184,55 +188,22 @@ class DomTextMetricsProvider implements TextMetricsProvider {
     fontString: FontString,
     lineHeight: ExcalidrawTextElement["lineHeight"],
   ) {
-    this.ensureNodes();
-
-    const span = this.span!;
-    span.style.font = fontString;
-    span.style.lineHeight = String(lineHeight);
-    span.textContent = text;
-    const rect = span.getBoundingClientRect();
-    return { width: rect.width, height: rect.height };
-  }
-}
-
-class CanvasTextMetricsProvider implements TextMetricsProvider {
-  private canvas: HTMLCanvasElement;
-
-  constructor() {
-    this.canvas = document.createElement("canvas");
-  }
-
-  /**
-   * We need to use the advance width as that's the closest thing to the browser wrapping algo, hence using it for:
-   * - text wrapping
-   * - wysiwyg editor (+padding)
-   *
-   * > The advance width is the distance between the glyph's initial pen position and the next glyph's initial pen position.
-   */
-  public getLineWidth(text: string, fontString: FontString): number {
-    const context = this.canvas.getContext("2d")!;
-    context.font = fontString;
-    const metrics = context.measureText(text);
-    const advanceWidth = metrics.width;
-
-    // since in test env the canvas measureText algo
-    // doesn't measure text and instead just returns number of
-    // characters hence we assume that each letteris 10px
-    if (isTestEnv()) {
-      return advanceWidth * 10;
+    const lines = text.split("\n");
+    let maxWidth = 0;
+    for (const line of lines) {
+      const w = this.getLineWidth(line, fontString);
+      if (w > maxWidth) {
+        maxWidth = w;
+      }
     }
-
-    return advanceWidth;
+    const fontSize = parseFloat(fontString) || 20;
+    const height = fontSize * lineHeight * (lines.length || 1);
+    return { width: maxWidth, height };
   }
 }
 
 export const getLineWidth = (text: string, font: FontString) => {
-  // 使用强制字符宽度计算整行宽度
-  let totalWidth = 0;
-  for (const char of text) {
-    totalWidth += charWidth.calculate(char, font);
-  }
-  return totalWidth;
+  return getTextMetricsProvider().getLineWidth(text, font);
 };
 
 export const getTextWidth = (text: string, font: FontString) => {
@@ -263,19 +234,7 @@ export const charWidth = (() => {
       cachedCharWidth[font] = [];
     }
     if (!cachedCharWidth[font][unicode]) {
-      // 检查是否为英文字母
-      const isEnglishChar = /^[a-zA-Z]$/.test(char);
-      
-      // 基于字体大小计算单位宽度
-      // 提取字体大小（假设font字符串格式为 "fontSize fontFamily"）
-      const fontSizeMatch = font.match(/^([0-9.]+)px/);
-      const fontSize = fontSizeMatch ? parseFloat(fontSizeMatch[1]) : 16;
-      
-      // 英文字符宽度为1单位，其他字符为2单位
-      // 单位宽度设为字体大小的1/2，可根据需要调整
-      const unitWidth = fontSize / 2;
-      const width = isEnglishChar ? unitWidth : unitWidth * 2;
-      
+      const width = getLineWidth(char, font);
       cachedCharWidth[font][unicode] = width;
     }
 

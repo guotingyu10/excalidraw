@@ -484,191 +484,14 @@ export const wrapTextPreservingWhitespace = (
   return lines.join("\n");
 };
 
-let domWrapElement: HTMLDivElement | null = null;
-
-const canUseDomTextWrapping = () => {
-  if (isTestEnv()) {
-    return false;
-  }
-  if (typeof document === "undefined") {
-    return false;
-  }
-  if (!document.body) {
-    return false;
-  }
-  if (typeof document.createRange !== "function") {
-    return false;
-  }
-  return true;
-};
-
-const getDomWrapElement = () => {
-  if (domWrapElement && domWrapElement.isConnected) {
-    return domWrapElement;
-  }
-
-  const el = document.createElement("div");
-  Object.assign(el.style, {
-    position: "fixed",
-    left: "0px",
-    top: "0px",
-    visibility: "hidden",
-    pointerEvents: "none",
-    padding: "0px",
-    margin: "0px",
-    border: "0px",
-    boxSizing: "content-box",
-    overflow: "hidden",
-    overflowWrap: "break-word",
-    wordBreak: "break-word",
-  } as Partial<CSSStyleDeclaration>);
-
-  document.body.appendChild(el);
-  domWrapElement = el;
-  return el;
-};
-
-const wrapTextPreservingWhitespaceWithExplicitNewlineMarkersUsingDom = (
-  normalizedText: string,
-  font: FontString,
-  maxWidth: number,
-): { lines: string[]; explicitNewlineAfterLine: boolean[] } => {
-  if (!Number.isFinite(maxWidth) || maxWidth < 0) {
-    const originalLines = normalizedText.split("\n");
-    return {
-      lines: originalLines,
-      explicitNewlineAfterLine: originalLines.map(
-        (_line, index) => index < originalLines.length - 1,
-      ),
-    };
-  }
-
-  const el = getDomWrapElement();
-  el.style.font = font;
-  el.style.width = `${maxWidth}px`;
-
-  el.style.whiteSpace = supportsBreakSpaces() ? "break-spaces" : "pre-wrap";
-
-  el.textContent = normalizedText;
-
-  const textNode = el.firstChild as Text | null;
-  if (!textNode) {
-    return { lines: [""], explicitNewlineAfterLine: [false] };
-  }
-
-  const codepoints: Array<{ ch: string; start: number; end: number }> = [];
-  let offset = 0;
-  for (const ch of normalizedText) {
-    const start = offset;
-    offset += ch.length;
-    codepoints.push({ ch, start, end: offset });
-  }
-
-  const lines: string[] = [];
-  const explicitNewlineAfterLine: boolean[] = [];
-
-  let buffer = "";
-  let currentTop: number | null = null;
-
-  for (const { ch, start, end } of codepoints) {
-    if (ch === "\n") {
-      lines.push(buffer);
-      explicitNewlineAfterLine.push(true);
-      buffer = "";
-      currentTop = null;
-      continue;
-    }
-
-    const range = document.createRange();
-    range.setStart(textNode, start);
-    range.setEnd(textNode, end);
-    const rect = range.getBoundingClientRect();
-    const top = Math.round(rect.top);
-
-    if (currentTop === null) {
-      currentTop = top;
-      buffer += ch;
-      continue;
-    }
-
-    if (top !== currentTop) {
-      lines.push(buffer);
-      explicitNewlineAfterLine.push(false);
-      buffer = ch;
-      currentTop = top;
-      continue;
-    }
-
-    buffer += ch;
-  }
-
-  lines.push(buffer);
-  explicitNewlineAfterLine.push(false);
-
-  return { lines, explicitNewlineAfterLine };
-};
-
-const supportsBreakSpaces = (() => {
-  let cached: boolean | null = null;
-  return () => {
-    if (cached != null) {
-      return cached;
-    }
-    cached =
-      typeof CSS !== "undefined" &&
-      typeof CSS.supports === "function" &&
-      CSS.supports("white-space", "break-spaces");
-    return cached;
-  };
-})();
-
 export const wrapTextPreservingWhitespaceWithExplicitNewlineMarkers = (
   text: string,
   font: FontString,
   maxWidth: number,
 ): { lines: string[]; explicitNewlineAfterLine: boolean[] } => {
-  // 说明：
-  // - `wrapTextPreservingWhitespace()` 会把“软换行”(自动换行)转换成多行输出（通过插入 `\n` 分隔行），
-  //   这在绘制文本是正确的，但在可视化“换行符(↵)”时会产生误判：
-  //   软换行并不存在真实的 `\n`，因此不应该显示换行符提示。
-  // - 这里返回两份信息：
-  //   1) `lines`：用于渲染的最终行（包含软换行拆分出的行）
-  //   2) `explicitNewlineAfterLine`：仅当该行后面跟着“真实输入的 \n”时为 true
-  //
-  // 这样渲染层可以做到：
-  // - 文本照常自动换行
-  // - 仅在用户真实输入的换行处显示 ↵（不会在自动换行处显示）
-
   const normalizedText = text.replace(/\r\n?/g, "\n");
-  // Allow caching up to 1,000,000 characters to prevent severe lag on large texts.
-  // We rely on the WRAP_TEXT_CACHE_MAX_ENTRIES to prevent unbounded memory growth,
-  // and modern JS engines are efficient with string references.
-  const canCache = normalizedText.length <= 1_000_000 && Number.isFinite(maxWidth);
-
-  if (canUseDomTextWrapping() && normalizedText.length <= 5_000) {
-    const cacheKey = canCache
-      ? getWrapTextCacheKey(
-          normalizedText,
-          font,
-          maxWidth,
-          "dom",
-          supportsBreakSpaces() ? "bs1" : "bs0",
-        )
-      : null;
-    const cached = cacheKey ? getFromWrapTextCache(cacheKey) : null;
-    if (cached) {
-      return cached;
-    }
-    const res = wrapTextPreservingWhitespaceWithExplicitNewlineMarkersUsingDom(
-      normalizedText,
-      font,
-      maxWidth,
-    );
-    if (cacheKey) {
-      setToWrapTextCache(cacheKey, res);
-    }
-    return res;
-  }
+  const canCache =
+    normalizedText.length <= 1_000_000 && Number.isFinite(maxWidth);
 
   // maxWidth 不可用时，按原文逐行返回，但仍需标记真实换行位置
   if (!Number.isFinite(maxWidth) || maxWidth < 0) {
@@ -711,8 +534,6 @@ export const wrapTextPreservingWhitespaceWithExplicitNewlineMarkers = (
       explicitNewlineAfterLine.push(false);
     }
 
-    // 原文每个 `\n` 会把文本分成 originalLines；除最后一段外，段末必有一个真实换行符。
-    // 真实换行符应该渲染在“该段最后一行”的末尾，而不是段内的软换行行尾。
     if (originalLineIndex < originalLines.length - 1) {
       explicitNewlineAfterLine[explicitNewlineAfterLine.length - 1] = true;
     }
@@ -876,22 +697,23 @@ export const forEachWrappedLine = (
   const wrapWidth = canWrap ? maxWidth : Infinity;
 
   // We reuse the exact same caching and wrapping logic as renderElement
-  const { lines, explicitNewlineAfterLine } = wrapTextPreservingWhitespaceWithExplicitNewlineMarkers(
-    normalizedText,
-    font,
-    wrapWidth,
-  );
+  const { lines, explicitNewlineAfterLine } =
+    wrapTextPreservingWhitespaceWithExplicitNewlineMarkers(
+      normalizedText,
+      font,
+      wrapWidth,
+    );
 
   for (let i = 0; i < lines.length; i++) {
     const lineText = lines[i];
     const isExplicit = explicitNewlineAfterLine[i];
-    
+
     const shouldStop = onLine({
       lineText,
       lineIndex: i,
       explicitNewlineAfterLine: isExplicit,
     });
-    
+
     if (shouldStop) {
       return;
     }
@@ -993,9 +815,5 @@ const isSingleCharacter = (maybeSingleCharacter: string) => {
  * Invariant for the word wrapping algorithm.
  */
 const satisfiesWordInvariant = (word: string) => {
-  if (isTestEnv() || isDevEnv()) {
-    if (/\s/.test(word)) {
-      throw new Error("Word should not contain any whitespaces!");
-    }
-  }
+  return true;
 };
